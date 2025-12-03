@@ -1,0 +1,275 @@
+'use client';
+
+import React, { useState } from 'react';
+
+// Mock Data for Notifications with Timestamps
+const initialNotifications = [
+    // Hoy
+    { id: '1', type: 'FEFO', title: 'Alerta FEFO Crítica', message: 'Lote A-20 de "Levadura Fresca" vence en 5 días.', timestamp: new Date(), read: false, details: 'El lote A-20 ubicado en la Cámara de Frío tiene una fecha de vencimiento próxima (08/12/2025). Se recomienda priorizar su uso o gestionar una liquidación.' },
+    { id: '2', type: 'Stock', title: 'Stock Bajo', message: 'El producto "Azúcar Flor 1kg" ha llegado a su nivel mínimo.', timestamp: new Date(Date.now() - 1000 * 60 * 60), read: false, details: 'El stock actual es de 48 unidades, por debajo del mínimo establecido de 50.' },
+
+    // Ayer
+    { id: '3', type: 'Discrepancy', title: 'Discrepancia de Inventario', message: 'El conteo #50 difiere en 20 unidades respecto al sistema.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), read: true, details: 'El conteo realizado por Juan Pérez en Bodega 1 reportó 80 unidades, mientras que el sistema registra 100.' },
+    { id: '4', type: 'System', title: 'Respaldo Completado', message: 'El respaldo diario de la base de datos se realizó con éxito.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), read: true, details: 'Backup automático completado a las 02:00 AM.' },
+
+    // Esta Semana (2 days ago)
+    { id: '5', type: 'Stock', title: 'Pedido Recibido', message: 'Se ha recepcionado la orden de compra #1234.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), read: true, details: 'Recepción completa de 50 sacos de Harina.' },
+
+    // Anterior (10 days ago)
+    { id: '6', type: 'System', title: 'Mantenimiento Programado', message: 'El sistema estará en mantenimiento el domingo.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10), read: true, details: 'Ventana de mantenimiento de 00:00 a 04:00 AM.' },
+];
+
+export default function NotificationsPage() {
+    const [notifications, setNotifications] = useState(initialNotifications);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState('Todas');
+    const [filterRead, setFilterRead] = useState('Todas');
+    const [selectedNotification, setSelectedNotification] = useState<any>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const getIcon = (type: string) => {
+        switch (type) {
+            case 'FEFO':
+                return (
+                    <div className="p-2 bg-red-100 rounded-lg text-red-600">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                );
+            case 'Stock':
+                return (
+                    <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                    </div>
+                );
+            case 'Discrepancy':
+                return (
+                    <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="p-2 bg-gray-100 rounded-lg text-gray-600">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                    </div>
+                );
+        }
+    };
+
+    const handleMarkAllAsRead = () => {
+        setNotifications(notifications.map(n => ({ ...n, read: true })));
+    };
+
+    const handleViewDetail = (notification: any) => {
+        setSelectedNotification(notification);
+        setIsModalOpen(true);
+        if (!notification.read) {
+            setNotifications(notifications.map(n => n.id === notification.id ? { ...n, read: true } : n));
+        }
+    };
+
+    const handleDelete = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (confirm('¿Estás seguro de eliminar esta notificación?')) {
+            setNotifications(notifications.filter(n => n.id !== id));
+        }
+    };
+
+    // Filter Logic
+    const filteredNotifications = notifications.filter(notif => {
+        const matchesSearch =
+            notif.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            notif.message.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesType = filterType === 'Todas' || notif.type === filterType;
+        const matchesRead = filterRead === 'Todas' ||
+            (filterRead === 'Leídas' && notif.read) ||
+            (filterRead === 'No leídas' && !notif.read);
+        return matchesSearch && matchesType && matchesRead;
+    });
+
+    // Grouping Logic
+    const groupedNotifications = filteredNotifications.reduce((groups: any, notif) => {
+        const date = notif.timestamp ? new Date(notif.timestamp) : new Date();
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        let groupKey = 'Anterior';
+
+        if (date.toDateString() === today.toDateString()) {
+            groupKey = 'Hoy';
+        } else if (date.toDateString() === yesterday.toDateString()) {
+            groupKey = 'Ayer';
+        } else if (date > new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)) {
+            groupKey = 'Esta Semana';
+        }
+
+        if (!groups[groupKey]) {
+            groups[groupKey] = [];
+        }
+        groups[groupKey].push(notif);
+        return groups;
+    }, {});
+
+    const groupOrder = ['Hoy', 'Ayer', 'Esta Semana', 'Anterior'];
+
+    return (
+        <div className="p-8 min-h-screen bg-gray-50/50">
+            <div className="mb-6 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Centro de Notificaciones</h1>
+                    <p className="text-gray-500 mt-1">Alertas operativas y avisos del sistema.</p>
+                </div>
+                <button
+                    onClick={handleMarkAllAsRead}
+                    className="text-sm text-primary font-medium hover:underline"
+                >
+                    Marcar todas como leídas
+                </button>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col sm:flex-row gap-4">
+                <input
+                    type="text"
+                    placeholder="Buscar notificaciones..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1 pl-4 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                    <option value="Todas">Todos los Tipos</option>
+                    <option value="FEFO">FEFO</option>
+                    <option value="Stock">Stock</option>
+                    <option value="Discrepancy">Discrepancia</option>
+                    <option value="System">Sistema</option>
+                </select>
+                <select
+                    value={filterRead}
+                    onChange={(e) => setFilterRead(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                    <option value="Todas">Todas</option>
+                    <option value="No leídas">No leídas</option>
+                    <option value="Leídas">Leídas</option>
+                </select>
+            </div>
+
+            <div className="max-w-4xl mx-auto space-y-8">
+                {groupOrder.map(group => {
+                    const items = groupedNotifications[group];
+                    if (!items || items.length === 0) return null;
+
+                    return (
+                        <div key={group}>
+                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">{group}</h3>
+                            <div className="space-y-3">
+                                {items.map((notif: any) => (
+                                    <div
+                                        key={notif.id}
+                                        onClick={() => handleViewDetail(notif)}
+                                        className={`bg-white p-5 rounded-xl border shadow-sm flex gap-4 transition-all hover:shadow-md cursor-pointer ${notif.read ? 'border-gray-200 opacity-75' : 'border-orange-100 ring-1 ring-orange-50'}`}
+                                    >
+                                        <div className="flex-shrink-0">
+                                            {getIcon(notif.type)}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h3 className={`text-base font-bold ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.title}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                                        {notif.timestamp?.toLocaleTimeString ? notif.timestamp.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                    </span>
+                                                    <button
+                                                        onClick={(e) => handleDelete(notif.id, e)}
+                                                        className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                                        title="Eliminar notificación"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-gray-600 leading-relaxed mb-3">{notif.message}</p>
+                                            <span className="inline-flex items-center text-xs font-bold text-primary hover:text-orange-700 transition-colors">
+                                                Ver detalle
+                                                <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </span>
+                                        </div>
+                                        {!notif.read && (
+                                            <div className="flex-shrink-0 self-center">
+                                                <div className="w-2.5 h-2.5 bg-primary rounded-full"></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {Object.keys(groupedNotifications).length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                        No hay notificaciones que coincidan con los filtros.
+                    </div>
+                )}
+            </div>
+
+            {/* Detail Modal */}
+            {isModalOpen && selectedNotification && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div className="flex items-center gap-3">
+                                {getIcon(selectedNotification.type)}
+                                <h3 className="text-lg font-bold text-gray-900">{selectedNotification.title}</h3>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mensaje</span>
+                                <p className="text-gray-800 mt-1 text-lg">{selectedNotification.message}</p>
+                            </div>
+                            <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Detalles Adicionales</span>
+                                <p className="text-gray-600 mt-1 text-sm leading-relaxed">{selectedNotification.details}</p>
+                            </div>
+                            <div className="flex justify-between items-center text-sm text-gray-400">
+                                <span>{selectedNotification.timestamp?.toLocaleDateString ? selectedNotification.timestamp.toLocaleDateString('es-CL') : ''} {selectedNotification.timestamp?.toLocaleTimeString ? selectedNotification.timestamp.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                                <span className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">{selectedNotification.type}</span>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                                <button
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 transition-colors"
+                                >
+                                    Entendido
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

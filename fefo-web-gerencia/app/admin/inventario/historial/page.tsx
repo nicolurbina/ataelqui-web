@@ -1,0 +1,132 @@
+'use client';
+
+import React, { useState } from 'react';
+
+// Mock Data for Count History
+const counts = [
+    { id: '1234', date: '25 Nov 2025', user: 'Juan Pérez', location: 'Bodega 1', status: 'Pendiente' },
+    { id: '1233', date: '24 Nov 2025', user: 'Pedro Soto', location: 'Cámara de Frío', status: 'Cerrado' },
+    { id: '1232', date: '24 Nov 2025', user: 'Maria Gomez', location: 'Bodega 2', status: 'Cerrado' },
+    { id: '1231', date: '23 Nov 2025', user: 'Juan Pérez', location: 'Bodega 3', status: 'Cerrado' },
+];
+
+export default function HistoryPage() {
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState('Todos los Estados');
+
+    const handleExport = (id: string) => {
+        setToastMessage(`Generando planilla de conteo #${id}.xlsx...`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+    };
+
+    const getStatusBadge = (status: string) => {
+        return status === 'Pendiente'
+            ? <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente revisión</span>
+            : <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Cerrado</span>;
+    };
+
+    const filteredCounts = counts.filter(count => {
+        const matchesSearch =
+            count.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            count.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            count.location.toLowerCase().includes(searchTerm.toLowerCase());
+
+        const matchesStatus = filterStatus === 'Todos los Estados' ||
+            (filterStatus === 'Pendiente revisión' && count.status === 'Pendiente') ||
+            (filterStatus === 'Cerrado' && count.status === 'Cerrado');
+
+        return matchesSearch && matchesStatus;
+    });
+
+    return (
+        <div className="p-8 min-h-screen bg-gray-50/50 relative">
+            {/* Toast Notification */}
+            {showToast && (
+                <div className="fixed top-4 right-4 z-50 animate-fade-in-down">
+                    <div className="bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3">
+                        <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                            <h4 className="font-bold text-sm">Exportación Iniciada</h4>
+                            <p className="text-xs text-gray-300">{toastMessage}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Historial de Conteos</h1>
+                <p className="text-gray-500 mt-1">Auditoría de inventarios realizados por el equipo.</p>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex gap-4 items-center">
+                <div className="relative flex-1 max-w-md">
+                    <input
+                        type="text"
+                        placeholder="Buscar por ID, Bodeguero o Ubicación..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                    <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                    <option>Todos los Estados</option>
+                    <option>Pendiente revisión</option>
+                    <option>Cerrado</option>
+                </select>
+            </div>
+
+            {/* History Table */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                            <th className="px-6 py-4">ID Conteo</th>
+                            <th className="px-6 py-4">Fecha Ejecución</th>
+                            <th className="px-6 py-4">Bodeguero</th>
+                            <th className="px-6 py-4">Ubicación</th>
+                            <th className="px-6 py-4 text-center">Estado</th>
+                            <th className="px-6 py-4 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {filteredCounts.map((count) => (
+                            <tr key={count.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4 text-sm font-bold text-gray-900">#{count.id}</td>
+                                <td className="px-6 py-4 text-sm text-gray-500">{count.date}</td>
+                                <td className="px-6 py-4 text-sm text-gray-700 font-medium">{count.user}</td>
+                                <td className="px-6 py-4 text-sm text-gray-500">{count.location}</td>
+                                <td className="px-6 py-4 text-center">
+                                    {getStatusBadge(count.status)}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    <button
+                                        onClick={() => handleExport(count.id)}
+                                        className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                                    >
+                                        <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        Exportar Excel
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
