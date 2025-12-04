@@ -1,6 +1,6 @@
 // API Client utilities para consumir la API desde el frontend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export interface ApiResponse<T> {
   success: boolean;

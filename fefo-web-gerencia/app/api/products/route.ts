@@ -1,0 +1,53 @@
+import { NextResponse } from 'next/server';
+import { db } from '@/config/firebase';
+import { collection, getDocs, addDoc, query, orderBy } from 'firebase/firestore';
+
+export async function GET() {
+    try {
+        const productsRef = collection(db, 'products');
+        // You might want to add ordering here
+        const q = query(productsRef);
+        const snapshot = await getDocs(q);
+
+        const products = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        return NextResponse.json({
+            success: true,
+            data: products
+        });
+    } catch (error: any) {
+        console.error('Error fetching products:', error);
+        return NextResponse.json(
+            { success: false, error: error.message },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(request: Request) {
+    try {
+        const data = await request.json();
+
+        // Basic validation could go here
+
+        const docRef = await addDoc(collection(db, 'products'), {
+            ...data,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: { id: docRef.id, ...data }
+        });
+    } catch (error: any) {
+        console.error('Error creating product:', error);
+        return NextResponse.json(
+            { success: false, error: error.message },
+            { status: 500 }
+        );
+    }
+}
