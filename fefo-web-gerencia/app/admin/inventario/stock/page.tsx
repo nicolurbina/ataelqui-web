@@ -90,7 +90,10 @@ export default function StockPage() {
         provider: '',
         warehouse: 'Bodega 1',
         totalStock: '',
-        minStock: ''
+        minStock: '',
+        unitType: 'unit', // 'unit' | 'box'
+        boxCount: '',
+        unitsPerBox: ''
     });
 
     // View Details Modal State
@@ -129,7 +132,10 @@ export default function StockPage() {
                 provider: product.provider,
                 warehouse: product.warehouse || 'Bodega 1',
                 totalStock: product.totalStock.toString(),
-                minStock: product.minStock.toString()
+                minStock: product.minStock.toString(),
+                unitType: 'unit',
+                boxCount: '',
+                unitsPerBox: ''
             });
         } else {
             setEditingId(null);
@@ -140,7 +146,10 @@ export default function StockPage() {
                 provider: '',
                 warehouse: 'Bodega 1',
                 totalStock: '',
-                minStock: ''
+                minStock: '',
+                unitType: 'unit',
+                boxCount: '',
+                unitsPerBox: ''
             });
         }
         setIsModalOpen(true);
@@ -149,7 +158,13 @@ export default function StockPage() {
     const handleSaveProduct = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        const stock = Number(newProduct.totalStock);
+        let stock = 0;
+        if (newProduct.unitType === 'box') {
+            stock = Number(newProduct.boxCount) * Number(newProduct.unitsPerBox);
+        } else {
+            stock = Number(newProduct.totalStock);
+        }
+
         const min = Number(newProduct.minStock);
 
         // Determine status based on stock levels
@@ -205,7 +220,10 @@ export default function StockPage() {
             provider: '',
             warehouse: 'Bodega 1',
             totalStock: '',
-            minStock: ''
+            minStock: '',
+            unitType: 'unit',
+            boxCount: '',
+            unitsPerBox: ''
         });
     };
 
@@ -549,33 +567,91 @@ export default function StockPage() {
                                 </select>
                             </div>
 
+                            {/* Unit Type Selection */}
+                            <div className="flex gap-6 items-center py-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="unitType"
+                                        value="unit"
+                                        checked={newProduct.unitType === 'unit'}
+                                        onChange={handleInputChange}
+                                        className="w-5 h-5 text-primary border-gray-300 focus:ring-primary"
+                                    />
+                                    <span className="text-gray-700 font-medium">Unidad</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="unitType"
+                                        value="box"
+                                        checked={newProduct.unitType === 'box'}
+                                        onChange={handleInputChange}
+                                        className="w-5 h-5 text-primary border-gray-300 focus:ring-primary"
+                                    />
+                                    <span className="text-gray-700 font-medium">Caja</span>
+                                </label>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Inicial</label>
-                                    <input
-                                        type="number"
-                                        name="totalStock"
-                                        required
-                                        min="0"
-                                        placeholder="0"
-                                        value={newProduct.totalStock}
-                                        onChange={handleInputChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
-                                    <input
-                                        type="number"
-                                        name="minStock"
-                                        required
-                                        min="0"
-                                        placeholder="0"
-                                        value={newProduct.minStock}
-                                        onChange={handleInputChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    />
-                                </div>
+                                {newProduct.unitType === 'unit' ? (
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+                                        <input
+                                            type="number"
+                                            name="totalStock"
+                                            required
+                                            min="0"
+                                            placeholder="0"
+                                            value={newProduct.totalStock}
+                                            onChange={handleInputChange}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                        />
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">N° Cajas</label>
+                                            <input
+                                                type="number"
+                                                name="boxCount"
+                                                required
+                                                min="0"
+                                                placeholder="0"
+                                                value={newProduct.boxCount}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Unid/Caja</label>
+                                            <input
+                                                type="number"
+                                                name="unitsPerBox"
+                                                required
+                                                min="0"
+                                                placeholder="0"
+                                                value={newProduct.unitsPerBox}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
+                                <input
+                                    type="number"
+                                    name="minStock"
+                                    required
+                                    min="0"
+                                    placeholder="0"
+                                    value={newProduct.minStock}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                />
                             </div>
 
                             <div className="pt-4 flex justify-end gap-3">
