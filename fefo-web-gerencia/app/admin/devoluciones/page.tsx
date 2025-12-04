@@ -1,14 +1,69 @@
-// app/devoluciones/page.tsx
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import ReturnsList from '@/components/tables/ReturnsList';
+import { apiClient } from '@/utils/api';
 
 export default function ReturnsPage() {
-    // Mock data
-    const requests = [
-        { id: '1', productName: 'Harina Selecta 25kg', quantity: 2, reason: 'Bolsa rota', date: '25 Nov 2025', status: 'pending' as const, requestedBy: 'Bodega 1' },
-        { id: '2', productName: 'Levadura Fresca 500g', quantity: 5, reason: 'Vencido', date: '24 Nov 2025', status: 'approved' as const, requestedBy: 'Bodega 2' },
-        { id: '3', productName: 'Crema Chantilly 1L', quantity: 1, reason: 'Error pedido', date: '23 Nov 2025', status: 'rejected' as const, requestedBy: 'Bodega 1' },
-    ];
+    const [requests, setRequests] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchReturns();
+    }, []);
+
+    const fetchReturns = async () => {
+        try {
+            const response = await apiClient.getReturns();
+            if (response.success && response.data) {
+                const mappedRequests = (response.data as any[]).map(item => ({
+                    id: item.id,
+                    productName: item.productName || 'Producto Desconocido',
+                    quantity: item.quantity,
+                    reason: item.reason,
+                    date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                    status: item.status,
+                    requestedBy: item.requestedBy || 'Bodega'
+                }));
+                setRequests(mappedRequests);
+            }
+        } catch (error) {
+            console.error('Error fetching returns:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleApprove = async (id: string) => {
+        try {
+            const response = await apiClient.approveReturn(id);
+            if (response.success) {
+                fetchReturns(); // Refresh list
+            } else {
+                alert('Error al aprobar devolución');
+            }
+        } catch (error) {
+            console.error('Error approving return:', error);
+        }
+    };
+
+    const handleReject = async (id: string) => {
+        try {
+            const response = await apiClient.rejectReturn(id);
+            if (response.success) {
+                fetchReturns(); // Refresh list
+            } else {
+                alert('Error al rechazar devolución');
+            }
+        } catch (error) {
+            console.error('Error rejecting return:', error);
+        }
+    };
+
+    // Calculate stats from real data
+    const totalMermas = requests
+        .filter(r => r.status === 'approved')
+        .reduce((acc, curr) => acc + (curr.quantity * 1000), 0); // Placeholder cost
 
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
@@ -28,7 +83,15 @@ export default function ReturnsPage() {
                             <span className="px-3 py-1 text-xs font-medium bg-transparent text-gray-400 cursor-pointer hover:text-gray-600">Historial</span>
                         </div>
                     </div>
-                    <ReturnsList requests={requests} />
+                    {loading ? (
+                        <div className="text-center py-10 text-gray-500">Cargando devoluciones...</div>
+                    ) : (
+                        <ReturnsList
+                            requests={requests}
+                            onApprove={handleApprove}
+                            onReject={handleReject}
+                        />
+                    )}
                 </div>
 
                 <div className="lg:col-span-1">
@@ -37,7 +100,8 @@ export default function ReturnsPage() {
                         <div className="space-y-4">
                             <div className="p-4 rounded-lg bg-red-50 border border-red-100">
                                 <p className="text-sm text-red-600 font-medium">Total Mermas (Mes)</p>
-                                <p className="text-2xl font-bold text-red-700 mt-1">$543.50</p>
+                                <p className="text-2xl font-bold text-red-700 mt-1">$0</p>
+                                <p className="text-xs text-red-400 mt-1">Cálculo de costo pendiente de implementación</p>
                             </div>
 
                             <div>
@@ -45,18 +109,18 @@ export default function ReturnsPage() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Vencimiento</span>
-                                        <span className="font-medium text-gray-900">65%</span>
+                                        <span className="font-medium text-gray-900">--%</span>
                                     </div>
                                     <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                        <div className="bg-red-500 h-1.5 rounded-full" style={{ width: '65%' }}></div>
+                                        <div className="bg-red-500 h-1.5 rounded-full" style={{ width: '0%' }}></div>
                                     </div>
 
                                     <div className="flex justify-between text-sm mt-2">
                                         <span className="text-gray-600">Daño/Rotura</span>
-                                        <span className="font-medium text-gray-900">25%</span>
+                                        <span className="font-medium text-gray-900">--%</span>
                                     </div>
                                     <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                        <div className="bg-orange-500 h-1.5 rounded-full" style={{ width: '25%' }}></div>
+                                        <div className="bg-orange-500 h-1.5 rounded-full" style={{ width: '0%' }}></div>
                                     </div>
                                 </div>
                             </div>

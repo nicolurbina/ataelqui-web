@@ -2,17 +2,12 @@
 
 import React, { useState } from 'react';
 
-// Mock Data for Kardex
-const movements = [
-    { id: '1', date: '25 Nov 2025 10:30', product: 'Harina Selecta 25kg', type: 'Salida', quantity: 5, reason: 'Pedido #405', user: 'Juan Pérez' },
-    { id: '2', date: '25 Nov 2025 08:15', product: 'Levadura Fresca 500g', type: 'Entrada', quantity: 50, reason: 'Recepción Prov.', user: 'Pedro Soto' },
-    { id: '3', date: '24 Nov 2025 16:45', product: 'Manteca Vegetal 10kg', type: 'Ajuste', quantity: -2, reason: 'Merma (Daño)', user: 'Maria Gomez' },
-    { id: '4', date: '24 Nov 2025 14:20', product: 'Harina Selecta 25kg', type: 'Salida', quantity: 10, reason: 'Pedido #402', user: 'Juan Pérez' },
-];
-
 export default function KardexPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('Todos los Tipos');
+
+    // No real data source for Kardex yet
+    const movements: any[] = [];
 
     const getTypeBadge = (type: string) => {
         switch (type) {
@@ -81,20 +76,29 @@ export default function KardexPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {filteredMovements.map((mov) => (
-                            <tr key={mov.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-6 py-4 text-sm text-gray-500">{mov.date}</td>
-                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{mov.product}</td>
-                                <td className="px-6 py-4 text-center">
-                                    {getTypeBadge(mov.type)}
+                        {filteredMovements.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                    <p>No hay movimientos registrados.</p>
+                                    <p className="text-xs mt-1 text-gray-400">El historial de movimientos se activará próximamente.</p>
                                 </td>
-                                <td className={`px-6 py-4 text-sm font-bold text-center ${mov.quantity < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                    {mov.quantity > 0 ? `+${mov.quantity}` : mov.quantity}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-600">{mov.reason}</td>
-                                <td className="px-6 py-4 text-sm text-gray-500">{mov.user}</td>
                             </tr>
-                        ))}
+                        ) : (
+                            filteredMovements.map((mov) => (
+                                <tr key={mov.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 text-sm text-gray-500">{mov.date}</td>
+                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{mov.product}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        {getTypeBadge(mov.type)}
+                                    </td>
+                                    <td className={`px-6 py-4 text-sm font-bold text-center ${mov.quantity < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        {mov.quantity > 0 ? `+${mov.quantity}` : mov.quantity}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">{mov.reason}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">{mov.user}</td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>

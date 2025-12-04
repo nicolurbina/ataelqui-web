@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { apiClient } from '@/utils/api';
 
 const Sidebar = () => {
     const pathname = usePathname();
@@ -12,6 +13,41 @@ const Sidebar = () => {
         tareas: false,
         devoluciones: false,
     });
+    const [notificationCount, setNotificationCount] = useState(0);
+
+    useEffect(() => {
+        fetchNotifications();
+    }, []);
+
+    const fetchNotifications = async () => {
+        try {
+            // Fetch various alerts/counts
+            const [fefoRes, tasksRes, returnsRes] = await Promise.all([
+                apiClient.getFefoAlerts(),
+                apiClient.getTasks({ status: 'pending' }),
+                apiClient.getReturns({ status: 'pending' })
+            ]);
+
+            let count = 0;
+
+            if (fefoRes.success && fefoRes.data) {
+                count += (fefoRes.data as any).alertsCount || 0;
+            }
+
+            if (tasksRes.success && Array.isArray(tasksRes.data)) {
+                count += tasksRes.data.length;
+            }
+
+            if (returnsRes.success && Array.isArray(returnsRes.data)) {
+                count += returnsRes.data.length;
+            }
+
+            setNotificationCount(count);
+
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+        }
+    };
 
     const toggleMenu = (menu: string) => {
         setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
@@ -96,7 +132,6 @@ const Sidebar = () => {
                     </div>
 
                     {/* Mermas */}
-                    {/* Mermas */}
                     <Link href="/admin/mermas" className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all group ${isActive('/admin/mermas') ? 'bg-white/20 text-white shadow-sm' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}>
                         <span className={`w-5 h-5 mr-3 ${isActive('/admin/mermas') ? 'text-white' : 'text-white/90 group-hover:text-white'}`}>
                             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -110,7 +145,11 @@ const Sidebar = () => {
                             <svg className="bell-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                         </span>
                         Notificaciones
-                        <span className="ml-auto bg-white text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">2</span>
+                        {notificationCount > 0 && (
+                            <span className="ml-auto bg-white text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                {notificationCount}
+                            </span>
+                        )}
                     </Link>
 
                     {/* Administración Group */}

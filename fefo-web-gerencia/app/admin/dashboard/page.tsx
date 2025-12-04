@@ -12,20 +12,26 @@ export default function DashboardPage() {
         alerts: 0,
         stock: 0,
         valorizado: 0,
-        rotation: '0.0x' // Este lo dejamos fijo por ahora si no hay ventas
+        rotation: '0.0x',
+        fefoAlerts: 0
     });
     const [topProducts, setTopProducts] = useState<any[]>([]);
     const [categoriesData, setCategoriesData] = useState<any[]>([]);
+    const [pendingTasks, setPendingTasks] = useState({ returns: 0, counting: 0 });
 
     // 2. CARGAR DATOS REALES DE FIREBASE
     useEffect(() => {
         async function fetchData() {
             try {
-                // Pedimos los productos a la API
-                const response = await apiClient.getProducts();
-                
-                if (response.success && response.data) {
-                    const productos = response.data as any[];
+                // Pedimos los productos, inventario (para alertas FEFO) y tareas a la API
+                const [productsRes, fefoRes, tasksRes] = await Promise.all([
+                    apiClient.getProducts(),
+                    apiClient.getFefoAlerts(),
+                    apiClient.getTasks({ status: 'pending' })
+                ]);
+
+                if (productsRes.success && productsRes.data) {
+                    const productos = productsRes.data as any[];
 
                     // A. STOCK TOTAL
                     const totalStock = productos.reduce((acc, item) => acc + (Number(item.stock) || Number(item.quantity) || 0), 0);
@@ -57,21 +63,31 @@ export default function DashboardPage() {
                         const val = (Number(p.stock) || 0) * (Number(p.cost) || 0);
                         catMap[cat] = (catMap[cat] || 0) + val;
                     });
-                    
+
                     // Convertimos a array y ordenamos
                     const catArray = Object.entries(catMap)
                         .map(([name, value]) => ({ name, value }))
                         .sort((a, b) => b.value - a.value)
                         .slice(0, 3); // Top 3 categorías
 
+                    // F. FEFO ALERTS
+                    const fefoAlertsCount = fefoRes.success && fefoRes.data ? (fefoRes.data as any).alertsCount : 0;
+
+                    // G. TASKS
+                    const tasks = tasksRes.success && tasksRes.data ? (tasksRes.data as any[]) : [];
+                    const returnsPending = tasks.filter(t => t.type === 'devolution').length;
+                    const countingPending = tasks.filter(t => t.type === 'counting').length;
+
                     setStats({
                         alerts: totalAlertas,
                         stock: totalStock,
                         valorizado: totalValor,
-                        rotation: '1.2x' // Simulado
+                        rotation: '0.0x', // No data yet
+                        fefoAlerts: fefoAlertsCount
                     });
                     setTopProducts(sortedProducts);
                     setCategoriesData(catArray);
+                    setPendingTasks({ returns: returnsPending, counting: countingPending });
                 }
             } catch (error) {
                 console.error("Error al cargar dashboard:", error);
@@ -162,7 +178,7 @@ export default function DashboardPage() {
 
                         {/* Leyenda Dinámica */}
                         <div className="space-y-4">
-                            {categoriesData.length === 0 ? <p className="text-sm text-gray-400">Sin datos de categorías</p> : 
+                            {categoriesData.length === 0 ? <p className="text-sm text-gray-400">Sin datos de categorías</p> :
                                 categoriesData.map((cat, index) => {
                                     const colors = ['bg-blue-500', 'bg-amber-500', 'bg-emerald-500'];
                                     return (
@@ -204,75 +220,35 @@ export default function DashboardPage() {
                 </div>
             </section>
 
-            {/* FILA 3: TU DISEÑO ORIGINAL DE BARRAS Y TAREAS */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Columna 1: Proyección (Manteniendo diseño visual) */}
+            {/* FILA 3: DATOS REALES DE VENCIMIENTOS Y TAREAS */}
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Columna 1: Vencimientos (Real) */}
                 <div className="bg-white p-6 rounded-2xl card-shadow border border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Proyección Vencimientos (30d)</h3>
-                    <div className="h-32 flex items-end justify-between gap-2 px-2">
-                        <div className="w-full bg-red-100 rounded-t-lg relative group h-[30%]">
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-red-600">--</div>
-                            <div className="w-full h-full bg-red-400 rounded-t-lg opacity-80"></div>
-                            <p className="text-[10px] text-center mt-1 text-gray-400">Sem 1</p>
+                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Próximos Vencimientos (30d)</h3>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-3xl font-bold text-gray-900">{stats.fefoAlerts}</p>
+                            <p className="text-sm text-gray-500">Productos por vencer</p>
                         </div>
-                        <div className="w-full bg-orange-100 rounded-t-lg relative group h-[60%]">
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-orange-600">--</div>
-                            <div className="w-full h-full bg-orange-400 rounded-t-lg opacity-80"></div>
-                            <p className="text-[10px] text-center mt-1 text-gray-400">Sem 2</p>
-                        </div>
-                        <div className="w-full bg-yellow-100 rounded-t-lg relative group h-[45%]">
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-yellow-600">--</div>
-                            <div className="w-full h-full bg-yellow-400 rounded-t-lg opacity-80"></div>
-                            <p className="text-[10px] text-center mt-1 text-gray-400">Sem 3</p>
-                        </div>
-                        <div className="w-full bg-green-100 rounded-t-lg relative group h-[20%]">
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-green-600">--</div>
-                            <div className="w-full h-full bg-green-400 rounded-t-lg opacity-80"></div>
-                            <p className="text-[10px] text-center mt-1 text-gray-400">Sem 4</p>
+                        <div className={`p-3 rounded-full ${stats.fefoAlerts > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                         </div>
                     </div>
                 </div>
 
-                {/* Columna 2: Eficiencia (Estático por ahora, para mantener diseño) */}
-                <div className="bg-white p-6 rounded-2xl card-shadow border border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Eficiencia Operativa</h3>
-                    <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-100 rounded-full text-blue-600">
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 font-medium">Tiempo Promedio</p>
-                                    <p className="text-lg font-bold text-gray-800">12 min</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-100 rounded-full text-emerald-600">
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 font-medium">Completado Hoy</p>
-                                    <p className="text-lg font-bold text-gray-800">95%</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Columna 3: Tareas */}
+                {/* Columna 2: Tareas (Real) */}
                 <div className="bg-white p-6 rounded-2xl card-shadow border border-gray-100">
                     <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Urgente / Pendiente</h3>
                     <div className="space-y-3">
                         <div className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0">
                             <span className="text-sm text-gray-600">Devoluciones por aprobar</span>
-                            <span className="px-2 py-1 text-xs font-bold text-white bg-red-500 rounded-md">2</span>
+                            <span className={`px-2 py-1 text-xs font-bold text-white rounded-md ${pendingTasks.returns > 0 ? 'bg-red-500' : 'bg-gray-400'}`}>{pendingTasks.returns}</span>
                         </div>
                         <div className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0">
                             <span className="text-sm text-gray-600">Conteos pendientes</span>
-                            <span className="px-2 py-1 text-xs font-bold text-white bg-orange-500 rounded-md">4</span>
+                            <span className={`px-2 py-1 text-xs font-bold text-white rounded-md ${pendingTasks.counting > 0 ? 'bg-orange-500' : 'bg-gray-400'}`}>{pendingTasks.counting}</span>
                         </div>
                     </div>
                     <Link href="/admin/tareas" className="block w-full mt-4 text-center text-xs font-bold text-orange-600 hover:text-orange-700 uppercase tracking-wide">Ver todas →</Link>

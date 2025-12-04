@@ -1,20 +1,53 @@
 'use client';
 
-import React, { useState } from 'react';
-
-// Mock Data for Count History
-const counts = [
-    { id: '1234', date: '25 Nov 2025', user: 'Juan Pérez', location: 'Bodega 1', status: 'Pendiente' },
-    { id: '1233', date: '24 Nov 2025', user: 'Pedro Soto', location: 'Cámara de Frío', status: 'Cerrado' },
-    { id: '1232', date: '24 Nov 2025', user: 'Maria Gomez', location: 'Bodega 2', status: 'Cerrado' },
-    { id: '1231', date: '23 Nov 2025', user: 'Juan Pérez', location: 'Bodega 3', status: 'Cerrado' },
-];
+import React, { useEffect, useState } from 'react';
+import { apiClient } from '@/utils/api';
 
 export default function HistoryPage() {
+    const [counts, setCounts] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos los Estados');
+
+    useEffect(() => {
+        fetchCounts();
+    }, []);
+
+    const fetchCounts = async () => {
+        try {
+            // Fetch tasks that are related to counting
+            // Assuming 'counting' or 'Conteo' type. 
+            // Since we don't have a strict type enum yet, we'll fetch all and filter or use query param if supported.
+            // Dashboard used 'counting'.
+            const response = await apiClient.getTasks();
+            if (response.success && response.data) {
+                const allTasks = response.data as any[];
+                // Filter for counting tasks
+                const countingTasks = allTasks.filter(t =>
+                    t.type === 'counting' ||
+                    t.type === 'Conteo' ||
+                    t.type === 'Conteo Cíclico'
+                );
+
+                // Map to view model
+                const mappedCounts = countingTasks.map(t => ({
+                    id: t.id,
+                    date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                    user: t.assignedTo || 'Sin asignar',
+                    location: t.description || 'General', // Using description as location placeholder if not separate field
+                    status: t.status === 'completed' ? 'Cerrado' : 'Pendiente'
+                }));
+
+                setCounts(mappedCounts);
+            }
+        } catch (error) {
+            console.error('Error fetching history:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleExport = (id: string) => {
         setToastMessage(`Generando planilla de conteo #${id}.xlsx...`);
@@ -30,9 +63,9 @@ export default function HistoryPage() {
 
     const filteredCounts = counts.filter(count => {
         const matchesSearch =
-            count.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            count.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            count.location.toLowerCase().includes(searchTerm.toLowerCase());
+            (count.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (count.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (count.location || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesStatus = filterStatus === 'Todos los Estados' ||
             (filterStatus === 'Pendiente revisión' && count.status === 'Pendiente') ||
@@ -102,28 +135,38 @@ export default function HistoryPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {filteredCounts.map((count) => (
-                            <tr key={count.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-6 py-4 text-sm font-bold text-gray-900">#{count.id}</td>
-                                <td className="px-6 py-4 text-sm text-gray-500">{count.date}</td>
-                                <td className="px-6 py-4 text-sm text-gray-700 font-medium">{count.user}</td>
-                                <td className="px-6 py-4 text-sm text-gray-500">{count.location}</td>
-                                <td className="px-6 py-4 text-center">
-                                    {getStatusBadge(count.status)}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <button
-                                        onClick={() => handleExport(count.id)}
-                                        className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
-                                    >
-                                        <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                        </svg>
-                                        Exportar Excel
-                                    </button>
-                                </td>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">Cargando historial...</td>
                             </tr>
-                        ))}
+                        ) : filteredCounts.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No se encontraron conteos.</td>
+                            </tr>
+                        ) : (
+                            filteredCounts.map((count) => (
+                                <tr key={count.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 text-sm font-bold text-gray-900">#{count.id.substring(0, 8)}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">{count.date}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-700 font-medium">{count.user}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">{count.location}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        {getStatusBadge(count.status)}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button
+                                            onClick={() => handleExport(count.id)}
+                                            className="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                                        >
+                                            <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                            </svg>
+                                            Exportar Excel
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>

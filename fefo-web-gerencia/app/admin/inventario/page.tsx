@@ -1,16 +1,70 @@
-// app/inventario/page.tsx
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import InventoryTable from '@/components/tables/InventoryTable';
+import { apiClient } from '@/utils/api';
 
 export default function InventoryPage() {
-  // Mock data
-  const items = [
-    { id: '1', sku: 'PAN-001', name: 'Harina Selecta 25kg', batch: 'L-2023-001', expiryDate: '2025-12-01', quantity: 50, status: 'ok' as const },
-    { id: '2', sku: 'LEV-005', name: 'Levadura Fresca 500g', batch: 'L-2023-045', expiryDate: '2025-11-28', quantity: 120, status: 'warning' as const },
-    { id: '3', sku: 'MAN-002', name: 'Manteca Vegetal 10kg', batch: 'L-2023-012', expiryDate: '2025-11-20', quantity: 15, status: 'critical' as const },
-    { id: '4', sku: 'AZU-010', name: 'Azúcar Flor 1kg', batch: 'L-2023-088', expiryDate: '2026-01-15', quantity: 200, status: 'ok' as const },
-    { id: '5', sku: 'CHO-003', name: 'Cobertura Chocolate', batch: 'L-2023-099', expiryDate: '2025-12-10', quantity: 30, status: 'ok' as const },
-  ];
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [productsRes, inventoryRes] = await Promise.all([
+        apiClient.getProducts(),
+        apiClient.getInventory()
+      ]);
+
+      if (productsRes.success && inventoryRes.success && productsRes.data && inventoryRes.data) {
+        const products = productsRes.data as any[];
+        const inventory = inventoryRes.data as any[];
+
+        // Merge inventory with product details
+        const mergedItems = inventory.map(item => {
+          const product = products.find(p => p.id === item.productId);
+          return {
+            id: item.id,
+            sku: product?.sku || 'N/A',
+            name: product?.name || 'Producto Desconocido',
+            batch: item.batchNumber,
+            expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : 'N/A',
+            quantity: item.quantity,
+            status: mapStatus(item.status, item.expiryDate)
+          };
+        });
+
+        setItems(mergedItems);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mapStatus = (status: string, expiryDate: string | Date) => {
+    // Logic to determine status based on expiry or explicit status
+    // For now, mapping backend status or calculating based on date
+    if (status === 'damaged') return 'critical';
+    if (status === 'reserved') return 'warning';
+
+    // Check expiry
+    if (expiryDate) {
+      const today = new Date();
+      const expiry = new Date(expiryDate);
+      const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysUntilExpiry < 0) return 'critical'; // Expired
+      if (daysUntilExpiry < 30) return 'warning'; // Expiring soon
+    }
+
+    return 'ok';
+  };
 
   return (
     <div className="p-8 min-h-screen bg-gray-50/50">
@@ -47,7 +101,11 @@ export default function InventoryPage() {
         </button>
       </div>
 
-      <InventoryTable items={items} />
+      {loading ? (
+        <div className="text-center py-10 text-gray-500">Cargando inventario...</div>
+      ) : (
+        <InventoryTable items={items} />
+      )}
     </div>
   );
 }

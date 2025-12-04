@@ -1,15 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from '@/components/ui/DatePicker';
-
-// Mock Data for Unified History
-const history = [
-    { id: 'RET-003', date: '24 Nov 2025', origin: 'Móvil (Ruta)', client: 'Panadería La Estrella', items: 5, status: 'Aprobado', total: '$150.000', reason: 'Vencimiento' },
-    { id: 'MAN-001', date: '24 Nov 2025', origin: 'Web (Manual)', client: 'Minimarket Don Pepe', items: 2, status: 'Aprobado', total: '$45.000', reason: 'Daño' },
-    { id: 'RET-002', date: '23 Nov 2025', origin: 'Móvil (Ruta)', client: 'Supermercado El Sol', items: 10, status: 'Rechazado', total: '$0', reason: 'Vencimiento' },
-    { id: 'RET-001', date: '15 Oct 2025', origin: 'Móvil (Ruta)', client: 'Almacén Los Pinos', items: 3, status: 'Aprobado', total: '$25.000', reason: 'Error de Pedido' },
-];
+import { apiClient } from '@/utils/api';
 
 export default function ReturnsHistoryPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -17,12 +10,48 @@ export default function ReturnsHistoryPage() {
     const [filterReason, setFilterReason] = useState('Todos los Motivos');
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+    // Real Data State
+    const [history, setHistory] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    const fetchHistory = async () => {
+        try {
+            setLoading(true);
+            const response = await apiClient.getReturns();
+            if (response.success && response.data) {
+                const mappedHistory = (response.data as any[]).map(item => ({
+                    id: item.id,
+                    date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                    rawDate: item.createdAt ? new Date(item.createdAt) : null,
+                    // Assuming API might not return origin/client explicitly yet, using placeholders or mapping
+                    origin: item.origin || 'Móvil (Ruta)',
+                    client: item.requestedBy || 'Cliente Desconocido',
+                    items: item.quantity || 1,
+                    status: item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobado' : item.status === 'rejected' ? 'Rechazado' : item.status,
+                    total: '$0', // Placeholder as cost isn't in simple return object yet
+                    reason: item.reason || 'Sin motivo'
+                }));
+                setHistory(mappedHistory);
+            }
+        } catch (error) {
+            console.error('Error fetching history:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'Aprobado':
                 return <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Aprobado</span>;
             case 'Rechazado':
                 return <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Rechazado</span>;
+            case 'Pendiente':
+                return <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente</span>;
             default:
                 return <span className="px-2 py-1 text-xs font-semibold text-gray-600 bg-gray-100 rounded-full">{status}</span>;
         }
@@ -36,20 +65,19 @@ export default function ReturnsHistoryPage() {
 
     const filteredHistory = history.filter(item => {
         const matchesSearch =
-            item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.client.toLowerCase().includes(searchTerm.toLowerCase());
+            (item.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesOrigin = filterOrigin === 'Todos los Orígenes' || item.origin === filterOrigin;
         const matchesReason = filterReason === 'Todos los Motivos' || item.reason === filterReason;
 
         // Date Filtering (Exact Day, Month, and Year)
         let matchesDate = true;
-        if (selectedDate) {
-            const itemDate = new Date(item.date);
+        if (selectedDate && item.rawDate) {
             matchesDate =
-                itemDate.getDate() === selectedDate.getDate() &&
-                itemDate.getMonth() === selectedDate.getMonth() &&
-                itemDate.getFullYear() === selectedDate.getFullYear();
+                item.rawDate.getDate() === selectedDate.getDate() &&
+                item.rawDate.getMonth() === selectedDate.getMonth() &&
+                item.rawDate.getFullYear() === selectedDate.getFullYear();
         }
 
         return matchesSearch && matchesOrigin && matchesReason && matchesDate;
@@ -100,6 +128,7 @@ export default function ReturnsHistoryPage() {
                     <option>Todos los Motivos</option>
                     <option>Vencimiento</option>
                     <option>Daño</option>
+                    <option>Error de Pedido</option>
                 </select>
             </div>
 
@@ -118,7 +147,11 @@ export default function ReturnsHistoryPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {filteredHistory.length > 0 ? (
+                        {loading ? (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">Cargando historial...</td>
+                            </tr>
+                        ) : filteredHistory.length > 0 ? (
                             filteredHistory.map((item) => (
                                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 text-sm font-bold text-gray-900">{item.id}</td>

@@ -31,7 +31,7 @@ export const initializeFirebase = (): FirebaseFirestore.Firestore => {
     }
 
     // 2) Local service account file inside project
-    const localPath = path.join(process.cwd(), 'fefo-api-express', 'firebase-service-account.json');
+    const localPath = path.join(process.cwd(), 'firebase-service-account.json');
     if (fs.existsSync(localPath)) {
       const serviceAccount = JSON.parse(fs.readFileSync(localPath, 'utf8'));
       admin.initializeApp({

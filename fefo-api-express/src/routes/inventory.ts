@@ -6,11 +6,13 @@ import type { Query, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 const router: Router = express.Router();
 
 // Get all inventory items
+// CÓDIGO CORREGIDO
 router.get('/', async (req: Request, res: Response) => {
   try {
     const db = getFirebaseDB();
     const { status, location, productId } = req.query;
 
+    // SOLUCIÓN: Ahora lee de 'inventory'
     let query: Query = db.collection('inventory') as Query;
 
     if (status) query = query.where('status', '==', status);

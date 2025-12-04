@@ -1,11 +1,44 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from '@/components/ui/DatePicker';
+import { apiClient } from '@/utils/api';
+import { useRouter } from 'next/navigation';
 
 export default function NewReturnPage() {
+    const router = useRouter();
     const [date, setDate] = useState<Date | null>(new Date());
     const [documentType, setDocumentType] = useState('Factura');
+    const [formData, setFormData] = useState({
+        client: '',
+        documentNumber: '',
+        vehicle: ''
+    });
+
+    // Product & Items State
+    const [products, setProducts] = useState<any[]>([]);
+    const [items, setItems] = useState<any[]>([]);
+    const [currentItem, setCurrentItem] = useState({
+        productId: '',
+        productName: '',
+        quantity: 0,
+        reason: ''
+    });
+
+    useEffect(() => {
+        fetchProducts();
+    }, []);
+
+    const fetchProducts = async () => {
+        try {
+            const response = await apiClient.getProducts();
+            if (response.success && response.data) {
+                setProducts(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
 
     const getDocumentLabel = () => {
         switch (documentType) {
@@ -13,6 +46,59 @@ export default function NewReturnPage() {
             case 'Boleta': return 'N° Boleta';
             case 'Otro': return 'N° Referencia / Guía';
             default: return 'N° Documento';
+        }
+    };
+
+    const handleAddItem = () => {
+        if (!currentItem.productId || currentItem.quantity <= 0 || !currentItem.reason) {
+            alert('Por favor complete los datos del producto');
+            return;
+        }
+
+        setItems([...items, { ...currentItem, id: Date.now() }]); // Simple ID generation
+        setCurrentItem({
+            productId: '',
+            productName: '',
+            quantity: 0,
+            reason: ''
+        });
+    };
+
+    const handleRemoveItem = (id: number) => {
+        setItems(items.filter(item => item.id !== id));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (items.length === 0) {
+            alert('Debe agregar al menos un producto');
+            return;
+        }
+
+        try {
+            // Create a return request for each item (simplification, or backend handles bulk)
+            // Assuming backend creates one return request per call, or we loop.
+            // For this UI, let's assume we create one "Return Request" that contains multiple items,
+            // OR we loop and create individual requests as per the current simple API structure.
+
+            // Current API `createReturn` seems to take a single object. 
+            // Let's loop for now to be safe with the simple API structure we inferred.
+            for (const item of items) {
+                await apiClient.createReturn({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    reason: item.reason,
+                    status: 'pending',
+                    requestedBy: formData.client || 'Cliente Directo', // Using client name as requester
+                    // Additional metadata could be passed if API supports it (vehicle, document, etc.)
+                });
+            }
+
+            alert('Devolución registrada exitosamente');
+            router.push('/admin/devoluciones/bandeja'); // Redirect to inbox
+        } catch (error) {
+            console.error('Error creating return:', error);
+            alert('Error al registrar la devolución');
         }
     };
 
@@ -25,12 +111,19 @@ export default function NewReturnPage() {
                 </div>
 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8">
-                    <form className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Cliente */}
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                                <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Buscar cliente..." />
+                                <input
+                                    type="text"
+                                    value={formData.client}
+                                    onChange={(e) => setFormData({ ...formData, client: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Nombre del Cliente..."
+                                    required
+                                />
                             </div>
 
                             {/* Tipo Documento */}
@@ -50,7 +143,13 @@ export default function NewReturnPage() {
                             {/* N° Documento */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{getDocumentLabel()}</label>
-                                <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ej: 123456" />
+                                <input
+                                    type="text"
+                                    value={formData.documentNumber}
+                                    onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Ej: 123456"
+                                />
                             </div>
 
                             {/* Fecha */}
@@ -62,7 +161,13 @@ export default function NewReturnPage() {
                             {/* Vehículo */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Vehículo / Transporte</label>
-                                <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ej: Citroen, Camión 01..." />
+                                <input
+                                    type="text"
+                                    value={formData.vehicle}
+                                    onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Ej: Citroen, Camión 01..."
+                                />
                             </div>
                         </div>
 
@@ -71,53 +176,103 @@ export default function NewReturnPage() {
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <div className="md:col-span-5">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Producto</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
-                                        <option>Seleccionar Producto...</option>
-                                        <option>Harina Selecta 25kg</option>
-                                        <option>Manteca Vegetal</option>
+                                    <select
+                                        value={currentItem.productId}
+                                        onChange={(e) => {
+                                            const product = products.find(p => p.id === e.target.value);
+                                            setCurrentItem({
+                                                ...currentItem,
+                                                productId: e.target.value,
+                                                productName: product ? product.name : ''
+                                            });
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                                    >
+                                        <option value="">Seleccionar Producto...</option>
+                                        {products.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad</label>
-                                    <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm" placeholder="0" />
+                                    <input
+                                        type="number"
+                                        value={currentItem.quantity === 0 ? '' : currentItem.quantity}
+                                        onChange={(e) => setCurrentItem({ ...currentItem, quantity: parseInt(e.target.value) || 0 })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                                        placeholder="0"
+                                    />
                                 </div>
                                 <div className="md:col-span-4">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Motivo</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
-                                        <option>Seleccionar...</option>
-                                        <option>Producto Vencido</option>
-                                        <option>Envase Dañado</option>
-                                        <option>Error de Pedido</option>
+                                    <select
+                                        value={currentItem.reason}
+                                        onChange={(e) => setCurrentItem({ ...currentItem, reason: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                                    >
+                                        <option value="">Seleccionar...</option>
+                                        <option value="Producto Vencido">Producto Vencido</option>
+                                        <option value="Envase Dañado">Envase Dañado</option>
+                                        <option value="Error de Pedido">Error de Pedido</option>
+                                        <option value="Rechazo Cliente">Rechazo Cliente</option>
                                     </select>
                                 </div>
                                 <div className="md:col-span-1">
-                                    <button type="button" className="w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-lg transition-colors">
-                                        <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <button
+                                        type="button"
+                                        onClick={handleAddItem}
+                                        className="w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-lg transition-colors flex items-center justify-center"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                         </svg>
                                     </button>
                                 </div>
                             </div>
 
-                            {/* List of added items (Mock) */}
-                            <div className="mt-4">
-                                <div className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg mb-2">
-                                    <span className="text-sm font-medium text-gray-700">1x Harina Selecta 25kg</span>
-                                    <span className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded">Producto Vencido</span>
-                                    <button type="button" className="text-gray-400 hover:text-red-500">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                </div>
+                            {/* List of added items */}
+                            <div className="mt-4 space-y-2">
+                                {items.length === 0 && (
+                                    <p className="text-sm text-gray-400 text-center py-2">No hay productos agregados</p>
+                                )}
+                                {items.map((item) => (
+                                    <div key={item.id} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg">
+                                        <span className="text-sm font-medium text-gray-700">{item.quantity}x {item.productName}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-xs font-semibold px-2 py-1 rounded ${item.reason === 'Producto Vencido' ? 'text-red-600 bg-red-50' :
+                                                    item.reason === 'Envase Dañado' ? 'text-orange-600 bg-orange-50' :
+                                                        'text-blue-600 bg-blue-50'
+                                                }`}>
+                                                {item.reason}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveItem(item.id)}
+                                                className="text-gray-400 hover:text-red-500"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
                         <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
-                            <button type="button" className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                            <button
+                                type="button"
+                                onClick={() => router.back()}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                            >
                                 Cancelar
                             </button>
-                            <button type="submit" className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 shadow-md hover:shadow-lg transition-all">
+                            <button
+                                type="submit"
+                                className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 shadow-md hover:shadow-lg transition-all"
+                            >
                                 Registrar Devolución
                             </button>
                         </div>

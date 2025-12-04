@@ -1,41 +1,107 @@
 'use client';
 
-import React, { useState } from 'react';
-
-// Mock Data for Route Returns
-const routeReturns = [
-    { id: 'RET-001', date: '25 Nov 2025', vehicle: 'Camión A (Patente: FL-2020)', route: 'Ruta Caldera', user: 'Carlos Chofer', status: 'Pendiente', items: 3 },
-    { id: 'RET-002', date: '25 Nov 2025', vehicle: 'Camión B (Patente: AB-1234)', route: 'Ruta Centro', user: 'Miguel Repartidor', status: 'Pendiente', items: 1 },
-];
+import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/utils/api';
 
 export default function SettlementTrayPage() {
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('Pendiente');
 
+    // Real Data State
+    const [returns, setReturns] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchReturns();
+    }, []);
+
+    const fetchReturns = async () => {
+        try {
+            setLoading(true);
+            // Fetch all returns or filter by pending if API supports it
+            const response = await apiClient.getReturns();
+            if (response.success && response.data) {
+                const mappedReturns = (response.data as any[]).map(item => ({
+                    id: item.id,
+                    date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                    vehicle: 'N/A', // Not available in current API
+                    route: 'General', // Not available in current API
+                    user: item.requestedBy || 'Desconocido',
+                    status: item.status,
+                    items: 1, // Treating each request as 1 item for now
+                    // Details for expansion
+                    productName: item.productName || 'Producto Desconocido',
+                    quantity: item.quantity,
+                    reason: item.reason
+                }));
+                setReturns(mappedReturns);
+            }
+        } catch (error) {
+            console.error('Error fetching returns:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleApprove = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('¿Aprobar esta devolución?')) return;
+
+        try {
+            const response = await apiClient.approveReturn(id);
+            if (response.success) {
+                fetchReturns();
+            } else {
+                alert('Error al aprobar');
+            }
+        } catch (error) {
+            console.error('Error approving:', error);
+        }
+    };
+
+    const handleReject = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('¿Rechazar esta devolución?')) return;
+
+        try {
+            const response = await apiClient.rejectReturn(id);
+            if (response.success) {
+                fetchReturns();
+            } else {
+                alert('Error al rechazar');
+            }
+        } catch (error) {
+            console.error('Error rejecting:', error);
+        }
+    };
+
     const toggleRow = (id: string) => {
         setExpandedRow(expandedRow === id ? null : id);
     };
 
     const getStatusBadge = (status: string) => {
-        return status === 'Pendiente'
+        return status === 'pending'
             ? <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente</span>
-            : <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Aprobado</span>;
+            : status === 'approved'
+                ? <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Aprobado</span>
+                : <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Rechazado</span>;
     };
 
-    const filteredReturns = routeReturns.filter(item => {
+    const filteredReturns = returns.filter(item => {
         const matchesSearch =
-            item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.vehicle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.route.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.user.toLowerCase().includes(searchTerm.toLowerCase());
+            (item.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.user || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesStatus = filterStatus === 'Todos los Estados' ||
-            (filterStatus === 'Pendiente' && item.status === 'Pendiente') ||
-            (filterStatus === 'Aprobado' && item.status === 'Aprobado');
+            (filterStatus === 'Pendiente' && item.status === 'pending') ||
+            (filterStatus === 'Aprobado' && item.status === 'approved') ||
+            (filterStatus === 'Rechazado' && item.status === 'rejected');
 
         return matchesSearch && matchesStatus;
     });
+
+    const pendingCount = returns.filter(r => r.status === 'pending').length;
 
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
@@ -47,11 +113,12 @@ export default function SettlementTrayPage() {
                 <div className="flex gap-4">
                     <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
                         <span className="block text-xs text-gray-500 uppercase font-bold">Pendientes</span>
-                        <span className="text-xl font-bold text-yellow-600">5</span>
+                        <span className="text-xl font-bold text-yellow-600">{pendingCount}</span>
                     </div>
+                    {/* Placeholder for Total Mes */}
                     <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
                         <span className="block text-xs text-gray-500 uppercase font-bold">Total Mes</span>
-                        <span className="text-xl font-bold text-gray-900">$1.2M</span>
+                        <span className="text-xl font-bold text-gray-900">--</span>
                     </div>
                 </div>
             </div>
@@ -61,7 +128,7 @@ export default function SettlementTrayPage() {
                 <div className="relative flex-1 max-w-md">
                     <input
                         type="text"
-                        placeholder="Buscar por ID, Vehículo, Ruta o Chofer..."
+                        placeholder="Buscar por ID o Solicitante..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -76,7 +143,9 @@ export default function SettlementTrayPage() {
                     className="border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                     <option>Todos los Estados</option>
-                    <option>Pendiente</option>
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Aprobado">Aprobado</option>
+                    <option value="Rechazado">Rechazado</option>
                 </select>
             </div>
 
@@ -96,75 +165,86 @@ export default function SettlementTrayPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {filteredReturns.map((item) => (
-                            <React.Fragment key={item.id}>
-                                <tr className={`hover:bg-gray-50 transition-colors cursor-pointer ${expandedRow === item.id ? 'bg-orange-50/50' : ''}`} onClick={() => toggleRow(item.id)}>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{item.date}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.vehicle}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{item.route}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{item.user}</td>
-                                    <td className="px-6 py-4 text-center text-sm font-bold text-gray-700">{item.items}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        {getStatusBadge(item.status)}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <div className="group relative inline-block">
-                                            <svg className="w-5 h-5 text-gray-400 hover:text-primary cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            </svg>
-                                            {/* Tooltip Simulation */}
-                                            <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-32 bg-gray-900 text-white text-xs rounded py-1 px-2 text-center z-10">
-                                                Ver Foto Evidencia
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
-                                        {item.status === 'Pendiente' && (
-                                            <>
-                                                <button className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded shadow-sm transition-colors">
-                                                    Aprobar
-                                                </button>
-                                                <button className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold rounded shadow-sm transition-colors">
-                                                    Rechazar
-                                                </button>
-                                            </>
-                                        )}
-                                    </td>
-                                </tr>
-                                {/* Expanded Details Row */}
-                                {expandedRow === item.id && (
-                                    <tr className="bg-gray-50/50">
-                                        <td colSpan={8} className="px-6 py-4">
-                                            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-inner">
-                                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Detalle de Productos Devueltos</h4>
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="text-gray-500 border-b border-gray-100">
-                                                            <th className="pb-2 text-left">Producto</th>
-                                                            <th className="pb-2 text-center">Cantidad</th>
-                                                            <th className="pb-2 text-left">Motivo</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <tr className="border-b border-gray-50">
-                                                            <td className="py-2">Harina Selecta 25kg</td>
-                                                            <td className="py-2 text-center font-bold">2</td>
-                                                            <td className="py-2 text-red-600">Envase Roto</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="py-2">Levadura Fresca</td>
-                                                            <td className="py-2 text-center font-bold">1</td>
-                                                            <td className="py-2 text-orange-600">Vencimiento Próximo</td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Cargando devoluciones...</td>
+                            </tr>
+                        ) : filteredReturns.length === 0 ? (
+                            <tr>
+                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No se encontraron devoluciones.</td>
+                            </tr>
+                        ) : (
+                            filteredReturns.map((item) => (
+                                <React.Fragment key={item.id}>
+                                    <tr className={`hover:bg-gray-50 transition-colors cursor-pointer ${expandedRow === item.id ? 'bg-orange-50/50' : ''}`} onClick={() => toggleRow(item.id)}>
+                                        <td className="px-6 py-4 text-sm text-gray-500">{item.date}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.vehicle}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{item.route}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{item.user}</td>
+                                        <td className="px-6 py-4 text-center text-sm font-bold text-gray-700">{item.items}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            {getStatusBadge(item.status)}
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="group relative inline-block">
+                                                <svg className="w-5 h-5 text-gray-400 hover:text-primary cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                </svg>
+                                                {/* Tooltip Simulation */}
+                                                <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-32 bg-gray-900 text-white text-xs rounded py-1 px-2 text-center z-10">
+                                                    Ver Foto Evidencia
+                                                </div>
                                             </div>
                                         </td>
+                                        <td className="px-6 py-4 text-right space-x-2">
+                                            {item.status === 'pending' && (
+                                                <>
+                                                    <button
+                                                        onClick={(e) => handleApprove(item.id, e)}
+                                                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded shadow-sm transition-colors"
+                                                    >
+                                                        Aprobar
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => handleReject(item.id, e)}
+                                                        className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold rounded shadow-sm transition-colors"
+                                                    >
+                                                        Rechazar
+                                                    </button>
+                                                </>
+                                            )}
+                                        </td>
                                     </tr>
-                                )}
-                            </React.Fragment>
-                        ))}
+                                    {/* Expanded Details Row */}
+                                    {expandedRow === item.id && (
+                                        <tr className="bg-gray-50/50">
+                                            <td colSpan={8} className="px-6 py-4">
+                                                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-inner">
+                                                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Detalle de Productos Devueltos</h4>
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="text-gray-500 border-b border-gray-100">
+                                                                <th className="pb-2 text-left">Producto</th>
+                                                                <th className="pb-2 text-center">Cantidad</th>
+                                                                <th className="pb-2 text-left">Motivo</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr className="border-b border-gray-50">
+                                                                <td className="py-2">{item.productName}</td>
+                                                                <td className="py-2 text-center font-bold">{item.quantity}</td>
+                                                                <td className="py-2 text-red-600">{item.reason}</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>

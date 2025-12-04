@@ -78,9 +78,8 @@ export default function NotificationsPage() {
 
     const handleDelete = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm('¿Estás seguro de eliminar esta notificación?')) {
-            setNotifications(notifications.filter(n => n.id !== id));
-        }
+        setNotifications(notifications.filter(n => n.id !== id));
+        // Deleted without confirmation
     };
 
     // Filter Logic

@@ -1,21 +1,84 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-// Initial Mock Data
-const initialProducts = [
-    { id: '1', sku: 'PAN-001', name: 'Harina Selecta 25kg', category: 'Insumos', provider: 'Molino A', warehouse: 'Bodega 1', totalStock: 50, minStock: 20, status: 'Saludable' },
-    { id: '2', sku: 'LEV-005', name: 'Levadura Fresca 500g', category: 'Insumos', provider: 'Levaduras X', warehouse: 'Cámara de Frío', totalStock: 15, minStock: 20, status: 'Alerta' },
-    { id: '3', sku: 'MAN-002', name: 'Manteca Vegetal 10kg', category: 'Grasas', provider: 'Grasas Sur', warehouse: 'Bodega 2', totalStock: 5, minStock: 10, status: 'Crítico' },
-    { id: '4', sku: 'AZU-010', name: 'Azúcar Flor 1kg', category: 'Insumos', provider: 'Azucarera B', warehouse: 'Bodega 1', totalStock: 200, minStock: 50, status: 'Saludable' },
-    { id: '5', sku: 'CHO-003', name: 'Cobertura Chocolate', category: 'Repostería', provider: 'ChocoWorld', warehouse: 'Bodega 3', totalStock: 30, minStock: 15, status: 'Saludable' },
-];
+import { apiClient } from '../../../../utils/api';
+
+interface ProductData {
+    id: string;
+    sku: string;
+    name: string;
+    category: string;
+    provider: string;
+    warehouse: string;
+    totalStock: number;
+    minStock: number;
+    status: string;
+}
 
 export default function StockPage() {
-    const [products, setProducts] = useState(initialProducts);
+    const [products, setProducts] = useState<ProductData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('Todas las Categorías');
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [productsRes, inventoryRes] = await Promise.all([
+                apiClient.getProducts(),
+                apiClient.getInventory()
+            ]);
+
+            if (productsRes.success && inventoryRes.success && productsRes.data && inventoryRes.data) {
+                const productsData = productsRes.data as any[];
+                const inventoryData = inventoryRes.data as any[];
+
+                const mergedData = productsData.map(product => {
+                    // Calculate total stock from inventory items for this product
+                    const productInventory = inventoryData.filter(item => item.productId === product.id);
+                    const totalStock = productInventory.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+                    // Default minStock if not present (assuming 10 for now as it's not in Product type yet)
+                    const minStock = product.minStock || 10;
+
+                    let status = 'Saludable';
+                    if (totalStock <= minStock / 2) {
+                        status = 'Crítico';
+                    } else if (totalStock <= minStock) {
+                        status = 'Alerta';
+                    }
+
+                    return {
+                        id: product.id,
+                        sku: product.sku,
+                        name: product.name,
+                        category: product.category,
+                        provider: 'Proveedor X', // Placeholder as provider is not in Product type
+                        warehouse: 'Múltiple', // Placeholder
+                        totalStock,
+                        minStock,
+                        status
+                    };
+                });
+
+                setProducts(mergedData);
+            } else {
+                setError('Error al cargar datos');
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Error de conexión');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -29,6 +92,11 @@ export default function StockPage() {
         totalStock: '',
         minStock: ''
     });
+
+    // View Details Modal State
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [viewingProduct, setViewingProduct] = useState<ProductData | null>(null);
+    const [productBatches, setProductBatches] = useState<any[]>([]);
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -51,7 +119,7 @@ export default function StockPage() {
         }));
     };
 
-    const openModal = (product?: typeof initialProducts[0]) => {
+    const openModal = (product?: ProductData) => {
         if (product) {
             setEditingId(product.id);
             setNewProduct({
@@ -78,7 +146,7 @@ export default function StockPage() {
         setIsModalOpen(true);
     };
 
-    const handleSaveProduct = (e: React.FormEvent) => {
+    const handleSaveProduct = async (e: React.FormEvent) => {
         e.preventDefault();
 
         const stock = Number(newProduct.totalStock);
@@ -92,25 +160,39 @@ export default function StockPage() {
             status = 'Alerta';
         }
 
-        if (editingId) {
-            // Update existing product
-            setProducts(products.map(p => p.id === editingId ? {
-                ...p,
-                ...newProduct,
-                totalStock: stock,
-                minStock: min,
-                status
-            } : p));
-        } else {
-            // Add new product
-            const productToAdd = {
-                id: (products.length + 1).toString(),
-                ...newProduct,
-                totalStock: stock,
-                minStock: min,
-                status
-            };
-            setProducts([...products, productToAdd]);
+        try {
+            if (editingId) {
+                // Update existing product
+                const response = await apiClient.updateProduct(editingId, {
+                    ...newProduct,
+                    totalStock: stock,
+                    minStock: min,
+                    status
+                });
+
+                if (response.success) {
+                    fetchData(); // Refresh list
+                } else {
+                    alert('Error al actualizar producto');
+                }
+            } else {
+                // Add new product
+                const response = await apiClient.createProduct({
+                    ...newProduct,
+                    totalStock: stock,
+                    minStock: min,
+                    status
+                });
+
+                if (response.success) {
+                    fetchData(); // Refresh list
+                } else {
+                    alert('Error al crear producto');
+                }
+            }
+        } catch (error) {
+            console.error('Error saving product:', error);
+            alert('Error al guardar producto');
         }
 
         setIsModalOpen(false);
@@ -125,6 +207,41 @@ export default function StockPage() {
             totalStock: '',
             minStock: ''
         });
+    };
+
+    const handleDeleteProduct = async (id: string, name: string) => {
+        if (!confirm(`¿Estás seguro de que deseas eliminar el producto "${name}"?`)) return;
+
+        try {
+            const response = await apiClient.deleteProduct(id);
+            if (response.success) {
+                fetchData(); // Refresh list
+            } else {
+                alert('Error al eliminar producto');
+            }
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            alert('Error al eliminar producto');
+        }
+    };
+
+    const handleViewDetails = async (product: ProductData) => {
+        setViewingProduct(product);
+        setIsViewModalOpen(true);
+        setProductBatches([]); // Clear previous
+
+        try {
+            // Fetch inventory items for this product to show batches/lots
+            const response = await apiClient.getInventory();
+            if (response.success && response.data) {
+                const allInventory = response.data as any[];
+                // Filter for this product
+                const batches = allInventory.filter(item => item.productId === product.id);
+                setProductBatches(batches);
+            }
+        } catch (error) {
+            console.error('Error fetching product details:', error);
+        }
     };
 
     const filteredProducts = products.filter(product => {
@@ -300,15 +417,37 @@ export default function StockPage() {
                                     <td className="px-6 py-4 text-center">
                                         {getStatusBadge(product.status)}
                                     </td>
-                                    <td className="px-6 py-4 text-right space-x-2">
-                                        <button className="text-primary hover:text-orange-800 text-sm font-medium transition-colors">Ver Lotes</button>
-                                        <span className="text-gray-300">|</span>
-                                        <button
-                                            onClick={() => openModal(product)}
-                                            className="text-gray-500 hover:text-gray-800 text-sm font-medium transition-colors"
-                                        >
-                                            Editar
-                                        </button>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                onClick={() => handleViewDetails(product)}
+                                                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                                title="Ver Lotes"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => openModal(product)}
+                                                className="p-1 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                                                title="Editar"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteProduct(product.id, product.name)}
+                                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                                title="Eliminar"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -455,6 +594,99 @@ export default function StockPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* View Details Modal */}
+            {isViewModalOpen && viewingProduct && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{viewingProduct.name}</h3>
+                                <p className="text-sm text-gray-500">SKU: {viewingProduct.sku} | Categoría: {viewingProduct.category}</p>
+                            </div>
+                            <button onClick={() => setIsViewModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                                    <span className="block text-xs font-bold text-blue-600 uppercase mb-1">Stock Total</span>
+                                    <span className="text-2xl font-bold text-blue-900">{viewingProduct.totalStock}</span>
+                                </div>
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-center">
+                                    <span className="block text-xs font-bold text-gray-500 uppercase mb-1">Stock Mínimo</span>
+                                    <span className="text-2xl font-bold text-gray-700">{viewingProduct.minStock}</span>
+                                </div>
+                                <div className={`p-4 rounded-xl border text-center ${viewingProduct.status === 'Crítico' ? 'bg-red-50 border-red-100' :
+                                    viewingProduct.status === 'Alerta' ? 'bg-yellow-50 border-yellow-100' :
+                                        'bg-green-50 border-green-100'
+                                    }`}>
+                                    <span className={`block text-xs font-bold uppercase mb-1 ${viewingProduct.status === 'Crítico' ? 'text-red-600' :
+                                        viewingProduct.status === 'Alerta' ? 'text-yellow-600' :
+                                            'text-green-600'
+                                        }`}>Estado</span>
+                                    <span className={`text-xl font-bold ${viewingProduct.status === 'Crítico' ? 'text-red-900' :
+                                        viewingProduct.status === 'Alerta' ? 'text-yellow-900' :
+                                            'text-green-900'
+                                        }`}>{viewingProduct.status}</span>
+                                </div>
+                            </div>
+
+                            <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">Desglose por Lotes / Ubicación</h4>
+                            <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-50 text-gray-500 font-semibold">
+                                        <tr>
+                                            <th className="px-4 py-2">Lote / ID</th>
+                                            <th className="px-4 py-2">Ubicación</th>
+                                            <th className="px-4 py-2">Vencimiento</th>
+                                            <th className="px-4 py-2 text-right">Cantidad</th>
+                                            <th className="px-4 py-2 text-center">Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {productBatches.length > 0 ? (
+                                            productBatches.map((batch) => (
+                                                <tr key={batch.id}>
+                                                    <td className="px-4 py-2 font-medium text-gray-900">{batch.batchNumber || batch.id.substring(0, 8)}</td>
+                                                    <td className="px-4 py-2 text-gray-600">{batch.location || 'General'}</td>
+                                                    <td className="px-4 py-2 text-gray-600">
+                                                        {batch.expirationDate ? new Date(batch.expirationDate).toLocaleDateString() : 'N/A'}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right font-bold">{batch.quantity}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${batch.status === 'damaged' ? 'bg-red-100 text-red-700' :
+                                                            batch.status === 'expired' ? 'bg-orange-100 text-orange-700' :
+                                                                'bg-green-100 text-green-700'
+                                                            }`}>
+                                                            {batch.status === 'damaged' ? 'Dañado' : batch.status === 'expired' ? 'Vencido' : 'OK'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">No hay lotes registrados para este producto.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setIsViewModalOpen(false)}
+                                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

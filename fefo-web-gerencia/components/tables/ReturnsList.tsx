@@ -12,9 +12,11 @@ interface ReturnRequest {
 
 interface ReturnsListProps {
     requests: ReturnRequest[];
+    onApprove: (id: string) => void;
+    onReject: (id: string) => void;
 }
 
-const ReturnsList: React.FC<ReturnsListProps> = ({ requests }) => {
+const ReturnsList: React.FC<ReturnsListProps> = ({ requests, onApprove, onReject }) => {
     return (
         <div className="space-y-4">
             {requests.map((req) => (
@@ -39,16 +41,22 @@ const ReturnsList: React.FC<ReturnsListProps> = ({ requests }) => {
                     <div className="flex items-center space-x-2">
                         {req.status === 'pending' && (
                             <>
-                                <button className="px-3 py-1 text-xs font-medium text-white bg-success hover:bg-green-600 rounded-md transition-colors">
+                                <button
+                                    onClick={() => onApprove(req.id)}
+                                    className="px-3 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                >
                                     Aprobar
                                 </button>
-                                <button className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">
+                                <button
+                                    onClick={() => onReject(req.id)}
+                                    className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                                >
                                     Rechazar
                                 </button>
                             </>
                         )}
                         {req.status !== 'pending' && (
-                            <span className={`text-xs font-bold uppercase ${req.status === 'approved' ? 'text-success' : 'text-danger'}`}>
+                            <span className={`text-xs font-bold uppercase ${req.status === 'approved' ? 'text-green-600' : 'text-red-600'}`}>
                                 {req.status === 'approved' ? 'Aprobado' : 'Rechazado'}
                             </span>
                         )}
