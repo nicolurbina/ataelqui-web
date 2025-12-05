@@ -1,33 +1,97 @@
 'use client';
 
-import React, { useState } from 'react';
-
-// Mock Data for Users
-const users = [
-    { id: '1', name: 'Juan Pérez', email: 'juan@ataelqui.cl', role: 'Bodeguero', status: 'Activo' },
-    { id: '2', name: 'Maria Gomez', email: 'maria@ataelqui.cl', role: 'Supervisor', status: 'Activo' },
-    { id: '3', name: 'Pedro Soto', email: 'pedro@ataelqui.cl', role: 'Bodeguero', status: 'Inactivo' },
-];
+import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import { apiClient } from '@/utils/api';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('users');
     const [fefoDays, setFefoDays] = useState(7);
 
-    // User State
+    // User State (Existing Mock/Local)
     const [users, setUsers] = useState([
         { id: '1', name: 'Juan Pérez', email: 'juan@ataelqui.cl', role: 'Bodeguero', status: 'Activo' },
         { id: '2', name: 'Maria Gomez', email: 'maria@ataelqui.cl', role: 'Supervisor', status: 'Activo' },
         { id: '3', name: 'Pedro Soto', email: 'pedro@ataelqui.cl', role: 'Bodeguero', status: 'Inactivo' },
     ]);
-
-    // Create User State
     const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Bodeguero' });
-
-    // Edit User State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
 
-    // Handlers
+    // Providers State (New API-based)
+    const [providers, setProviders] = useState<any[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(false);
+    const [newProvider, setNewProvider] = useState({
+        name: '',
+        rut: '',
+        email: '',
+        phone: '',
+        status: 'Activo'
+    });
+    const [isEditProviderModalOpen, setIsEditProviderModalOpen] = useState(false);
+    const [editingProvider, setEditingProvider] = useState<any>(null);
+
+    // Fetch Providers when tab is active
+    useEffect(() => {
+        if (activeTab === 'providers') {
+            fetchProviders();
+        }
+    }, [activeTab]);
+
+    const fetchProviders = async () => {
+        try {
+            setLoadingProviders(true);
+            const response = await apiClient.getProviders();
+            if (response.success) {
+                setProviders(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching providers:', error);
+        } finally {
+            setLoadingProviders(false);
+        }
+    };
+
+    // Helper Functions
+    const formatRUT = (value: string) => {
+        const clean = value.replace(/[^0-9kK]/g, '');
+        if (!clean) return '';
+        if (clean.length === 1) return clean;
+
+        const body = clean.slice(0, -1);
+        const dv = clean.slice(-1).toUpperCase();
+
+        return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${dv}`;
+    };
+
+    const formatPhone = (value: string) => {
+        // Remove non-numeric characters
+        let clean = value.replace(/\D/g, '');
+
+        // If empty, return empty
+        if (clean.length === 0) return '';
+
+        // If user is starting to type, ensure it starts with 569
+        if (!clean.startsWith('569')) {
+            // If they typed '9', assume they meant 569
+            if (clean.startsWith('9')) clean = '56' + clean;
+            else clean = '569' + clean;
+        }
+
+        // Limit to 11 digits (56 9 XXXX XXXX)
+        if (clean.length > 11) clean = clean.slice(0, 11);
+
+        // Format
+        let formatted = '+';
+        if (clean.length > 0) formatted += clean.slice(0, 2); // 56
+        if (clean.length > 2) formatted += ' ' + clean.slice(2, 3); // 9
+        if (clean.length > 3) formatted += ' ' + clean.slice(3, 7); // XXXX
+        if (clean.length > 7) formatted += ' ' + clean.slice(7); // XXXX
+
+        return formatted;
+    };
+
+    // User Handlers
     const handleCreateUser = () => {
         if (!newUser.name || !newUser.email) return;
         const user = {
@@ -56,11 +120,125 @@ export default function SettingsPage() {
         setEditingUser(null);
     };
 
+    // Provider Handlers
+    const handleCreateProvider = async () => {
+        if (!newProvider.name || !newProvider.rut) {
+            alert('Nombre y RUT son obligatorios');
+            return;
+        }
+
+        try {
+            const response = await apiClient.createProvider(newProvider);
+            if (response.success) {
+                fetchProviders();
+                setNewProvider({ name: '', rut: '', email: '', phone: '', status: 'Activo' });
+            } else {
+                alert('Error al crear proveedor');
+            }
+        } catch (error) {
+            console.error('Error creating provider:', error);
+            alert('Error al crear proveedor');
+        }
+    };
+
+    const handleDeleteProvider = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar este proveedor?')) return;
+
+        try {
+            const response = await apiClient.deleteProvider(id);
+            if (response.success) {
+                fetchProviders();
+            } else {
+                alert('Error al eliminar proveedor');
+            }
+        } catch (error) {
+            console.error('Error deleting provider:', error);
+            alert('Error al eliminar proveedor');
+        }
+    };
+
+    const openEditProviderModal = (provider: any) => {
+        setEditingProvider({ ...provider });
+        setIsEditProviderModalOpen(true);
+    };
+
+    const handleUpdateProvider = async () => {
+        try {
+            const response = await apiClient.updateProvider(editingProvider.id, editingProvider);
+            if (response.success) {
+                fetchProviders();
+                setIsEditProviderModalOpen(false);
+                setEditingProvider(null);
+            } else {
+                alert('Error al actualizar proveedor');
+            }
+        } catch (error) {
+            console.error('Error updating provider:', error);
+            alert('Error al actualizar proveedor');
+        }
+    };
+
+    const handleDownloadTemplate = () => {
+        const headers = [['Nombre', 'RUT', 'Email', 'Telefono']];
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(headers);
+        XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+        XLSX.writeFile(wb, 'plantilla_proveedores.xlsx');
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            const bstr = evt.target?.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const wsname = wb.SheetNames[0];
+            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+            // Skip header row
+            const rows = data.slice(1) as any[];
+
+            let successCount = 0;
+            for (const row of rows) {
+                if (row[0]) { // Check if name exists
+                    const providerData = {
+                        name: row[0],
+                        rut: row[1] || '',
+                        email: row[2] || '',
+                        phone: row[3] || '',
+                        address: '',
+                        status: 'Activo'
+                    };
+                    try {
+                        await apiClient.createProvider(providerData);
+                        successCount++;
+                    } catch (err) {
+                        console.error('Error importing row:', row, err);
+                    }
+                }
+            }
+
+            if (successCount > 0) {
+                alert(`Se importaron ${successCount} proveedores exitosamente.`);
+                fetchProviders();
+            } else {
+                alert('No se pudieron importar proveedores. Verifique el formato del archivo.');
+            }
+
+            // Reset input
+            e.target.value = '';
+        };
+        reader.readAsBinaryString(file);
+    };
+
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
             <div className="mb-6">
                 <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Administración y Configuración</h1>
-                <p className="text-gray-500 mt-1">Gestión de usuarios, roles y parámetros del sistema.</p>
+                <p className="text-gray-500 mt-1">Gestión de usuarios, roles, proveedores y parámetros del sistema.</p>
             </div>
 
             {/* Tabs */}
@@ -71,6 +249,13 @@ export default function SettingsPage() {
                         }`}
                 >
                     Usuarios y Roles
+                </button>
+                <button
+                    onClick={() => setActiveTab('providers')}
+                    className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'providers' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                >
+                    Proveedores
                 </button>
                 <button
                     onClick={() => setActiveTab('params')}
@@ -180,6 +365,167 @@ export default function SettingsPage() {
                                         </td>
                                     </tr>
                                 ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : activeTab === 'providers' ? (
+                <div className="space-y-6">
+                    {/* Bulk Actions */}
+                    <div className="flex justify-end gap-3">
+                        <button
+                            onClick={handleDownloadTemplate}
+                            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
+                        >
+                            <svg className="w-5 h-5 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Descargar Plantilla
+                        </button>
+                        <div className="relative">
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={handleFileUpload}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm transition-colors">
+                                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                Carga Masiva
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Create Provider Section */}
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">Registrar Nuevo Proveedor</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre / Razón Social</label>
+                                <input
+                                    type="text"
+                                    value={newProvider.name}
+                                    onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    placeholder="Ej: Distribuidora Los Andes"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">RUT</label>
+                                <input
+                                    type="text"
+                                    value={newProvider.rut}
+                                    onChange={(e) => setNewProvider({ ...newProvider, rut: formatRUT(e.target.value) })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    placeholder="76.xxx.xxx-x"
+                                    maxLength={12}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Contacto</label>
+                                <input
+                                    type="email"
+                                    value={newProvider.email}
+                                    onChange={(e) => setNewProvider({ ...newProvider, email: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    placeholder="contacto@proveedor.cl"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label>
+                                <input
+                                    type="text"
+                                    value={newProvider.phone}
+                                    onChange={(e) => setNewProvider({ ...newProvider, phone: formatPhone(e.target.value) })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    placeholder="+56 9 1234 5678"
+                                    maxLength={16}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Estado</label>
+                                <select
+                                    value={newProvider.status}
+                                    onChange={(e) => setNewProvider({ ...newProvider, status: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                >
+                                    <option>Activo</option>
+                                    <option>Inactivo</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button
+                                    onClick={handleCreateProvider}
+                                    className="w-full py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
+                                >
+                                    + Crear Proveedor
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Providers Table */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                    <th className="px-6 py-4">Nombre</th>
+                                    <th className="px-6 py-4">RUT</th>
+                                    <th className="px-6 py-4">Contacto</th>
+                                    <th className="px-6 py-4 text-center">Estado</th>
+                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loadingProviders ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Cargando proveedores...</td>
+                                    </tr>
+                                ) : providers.length > 0 ? (
+                                    providers.map((provider) => (
+                                        <tr key={provider.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{provider.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500 font-mono">{provider.rut}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500">
+                                                <div className="flex flex-col">
+                                                    <span>{provider.email}</span>
+                                                    <span className="text-xs text-gray-400">{provider.phone}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${provider.status === 'Activo' ? 'text-green-700 bg-green-100' : 'text-gray-600 bg-gray-100'}`}>
+                                                    {provider.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right space-x-2">
+                                                <button
+                                                    onClick={() => openEditProviderModal(provider)}
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteProvider(provider.id)}
+                                                    className="text-red-400 hover:text-red-600 transition-colors"
+                                                    title="Eliminar"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No hay proveedores registrados.</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -339,6 +685,87 @@ export default function SettingsPage() {
                                 </button>
                                 <button
                                     onClick={handleUpdateUser}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-orange-700 shadow-sm"
+                                >
+                                    Guardar Cambios
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Provider Modal */}
+            {isEditProviderModalOpen && editingProvider && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">Editar Proveedor</h3>
+                            <button onClick={() => setIsEditProviderModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre / Razón Social</label>
+                                <input
+                                    type="text"
+                                    value={editingProvider.name}
+                                    onChange={(e) => setEditingProvider({ ...editingProvider, name: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">RUT</label>
+                                <input
+                                    type="text"
+                                    value={editingProvider.rut}
+                                    onChange={(e) => setEditingProvider({ ...editingProvider, rut: formatRUT(e.target.value) })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    maxLength={12}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    value={editingProvider.email}
+                                    onChange={(e) => setEditingProvider({ ...editingProvider, email: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                                <input
+                                    type="text"
+                                    value={editingProvider.phone}
+                                    onChange={(e) => setEditingProvider({ ...editingProvider, phone: formatPhone(e.target.value) })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    maxLength={16}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                                <select
+                                    value={editingProvider.status}
+                                    onChange={(e) => setEditingProvider({ ...editingProvider, status: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                >
+                                    <option>Activo</option>
+                                    <option>Inactivo</option>
+                                </select>
+                            </div>
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsEditProviderModalOpen(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleUpdateProvider}
                                     className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-orange-700 shadow-sm"
                                 >
                                     Guardar Cambios

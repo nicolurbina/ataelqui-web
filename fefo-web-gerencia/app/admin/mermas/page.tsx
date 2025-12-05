@@ -63,8 +63,8 @@ export default function MermasPage() {
                         batch: item.batchNumber,
                         quantity: item.quantity,
                         cause: item.status === 'expired' ? 'Vencido' : 'Daño', // Map status to cause
-                        unitCost: product?.cost || 0,
-                        totalLoss: (product?.cost || 0) * item.quantity
+                        unitCost: item.cost || product?.cost || 0,
+                        totalLoss: (item.cost || product?.cost || 0) * item.quantity
                     };
                 });
                 setWriteOffs(mappedWriteOffs);
@@ -118,7 +118,8 @@ export default function MermasPage() {
                 location: 'Merma', // Placeholder location
                 expiryDate: new Date().toISOString(), // Placeholder
                 batchNumber: newMerma.batch,
-                status: newMerma.cause === 'Vencido' ? 'expired' : 'damaged'
+                status: newMerma.cause === 'Vencido' ? 'expired' : 'damaged',
+                cost: newMerma.unitCost
             };
 
             const response = await apiClient.createInventoryItem(payload);
@@ -132,6 +133,22 @@ export default function MermasPage() {
             }
         } catch (error) {
             console.error('Error creating merma:', error);
+        }
+    };
+
+    const handleDeleteMerma = async (id: string) => {
+        if (!confirm('¿Estás seguro de que deseas eliminar este registro de merma?')) return;
+
+        try {
+            const response = await apiClient.deleteInventoryItem(id);
+            if (response.success) {
+                fetchData(); // Refresh list
+            } else {
+                alert('Error al eliminar merma');
+            }
+        } catch (error) {
+            console.error('Error deleting merma:', error);
+            alert('Error al eliminar merma');
         }
     };
 
@@ -288,6 +305,7 @@ export default function MermasPage() {
                             <th className="px-6 py-4">Causa</th>
                             <th className="px-6 py-4 text-right">Costo Unit.</th>
                             <th className="px-6 py-4 text-right">Pérdida Total</th>
+                            <th className="px-6 py-4 text-right">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -309,6 +327,17 @@ export default function MermasPage() {
                                     </td>
                                     <td className="px-6 py-4 text-right text-sm text-gray-500">{formatCurrency(item.unitCost)}</td>
                                     <td className="px-6 py-4 text-right text-sm font-bold text-red-600">{formatCurrency(item.totalLoss)}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button
+                                            onClick={() => handleDeleteMerma(item.id)}
+                                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </td>
                                 </tr>
                             ))
                         ) : (
@@ -411,8 +440,8 @@ export default function MermasPage() {
                                     <input
                                         type="number"
                                         value={newMerma.unitCost === 0 ? '' : newMerma.unitCost}
-                                        readOnly
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-100 cursor-not-allowed"
+                                        onChange={(e) => setNewMerma({ ...newMerma, unitCost: parseInt(e.target.value) || 0 })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
                                         placeholder="0"
                                     />
                                 </div>

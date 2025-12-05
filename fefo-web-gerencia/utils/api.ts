@@ -219,6 +219,30 @@ class ApiClient {
   async health() {
     return this.request('/health');
   }
+  // Providers
+  async getProviders() {
+    return this.request('/providers');
+  }
+
+  async createProvider(data: any) {
+    return this.request('/providers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateProvider(id: string, data: any) {
+    return this.request(`/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProvider(id: string) {
+    return this.request(`/providers/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

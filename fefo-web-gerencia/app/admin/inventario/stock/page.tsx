@@ -18,7 +18,24 @@ interface ProductData {
 }
 
 export default function StockPage() {
+    // Modal State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [newProduct, setNewProduct] = useState({
+        sku: '',
+        name: '',
+        category: 'Insumos',
+        provider: '',
+        warehouse: 'Bodega 1',
+        totalStock: '',
+        minStock: '',
+        unitType: 'unit', // 'unit' | 'box'
+        boxCount: '',
+        unitsPerBox: ''
+    });
+
     const [products, setProducts] = useState<ProductData[]>([]);
+    const [providers, setProviders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -27,19 +44,31 @@ export default function StockPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [productsRes, inventoryRes] = await Promise.all([
+            const [productsRes, inventoryRes, providersRes] = await Promise.all([
                 apiClient.getProducts(),
-                apiClient.getInventory()
+                apiClient.getInventory(),
+                apiClient.getProviders()
             ]);
 
             if (productsRes.success && inventoryRes.success && productsRes.data && inventoryRes.data) {
                 const productsData = productsRes.data as any[];
                 const inventoryData = inventoryRes.data as any[];
 
+                if (providersRes.success && providersRes.data) {
+                    setProviders(providersRes.data as any[]);
+                }
+
                 const mergedData = productsData.map(product => {
                     // Calculate total stock from inventory items for this product
                     const productInventory = inventoryData.filter(item => item.productId === product.id);
-                    const totalStock = productInventory.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                    const inventoryStock = productInventory.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+                    // Use inventory stock if available, otherwise fallback to product's totalStock (for legacy data)
+                    // Also check for 'stock' field just in case
+                    const rawStock = product.totalStock !== undefined ? product.totalStock : (product as any).stock;
+                    const fallbackStock = Number(rawStock) || 0;
+
+                    const totalStock = inventoryStock > 0 ? inventoryStock : fallbackStock;
 
                     // Default minStock if not present (assuming 10 for now as it's not in Product type yet)
                     const minStock = product.minStock || 10;
@@ -56,7 +85,7 @@ export default function StockPage() {
                         sku: product.sku,
                         name: product.name,
                         category: product.category,
-                        provider: 'Proveedor X', // Placeholder as provider is not in Product type
+                        provider: product.provider,
                         warehouse: 'Múltiple', // Placeholder
                         totalStock,
                         minStock,
@@ -79,22 +108,6 @@ export default function StockPage() {
     useEffect(() => {
         fetchData();
     }, []);
-
-    // Modal State
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [newProduct, setNewProduct] = useState({
-        sku: '',
-        name: '',
-        category: 'Insumos',
-        provider: '',
-        warehouse: 'Bodega 1',
-        totalStock: '',
-        minStock: '',
-        unitType: 'unit', // 'unit' | 'box'
-        boxCount: '',
-        unitsPerBox: ''
-    });
 
     // View Details Modal State
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -539,15 +552,20 @@ export default function StockPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
-                                <input
-                                    type="text"
+                                <select
                                     name="provider"
                                     required
                                     value={newProduct.provider}
                                     onChange={handleInputChange}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    placeholder="Ej: Molino A"
-                                />
+                                >
+                                    <option value="">Seleccionar Proveedor</option>
+                                    {providers.map((provider) => (
+                                        <option key={provider.id} value={provider.name}>
+                                            {provider.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>

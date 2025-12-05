@@ -6,7 +6,7 @@ import { apiClient } from '@/utils/api';
 export default function SettlementTrayPage() {
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('Pendiente');
+    const [filterStatus, setFilterStatus] = useState('Todos los Estados');
 
     // Real Data State
     const [returns, setReturns] = useState<any[]>([]);
@@ -81,11 +81,10 @@ export default function SettlementTrayPage() {
     };
 
     const getStatusBadge = (status: string) => {
-        return status === 'pending'
-            ? <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente</span>
-            : status === 'approved'
-                ? <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Aprobado</span>
-                : <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Rechazado</span>;
+        if (status === 'pending') return <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente</span>;
+        if (status === 'approved') return <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Aprobado</span>;
+        if (status === 'rejected') return <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Rechazado</span>;
+        return <span className="px-2 py-1 text-xs font-semibold text-gray-700 bg-gray-100 rounded-full">{status}</span>;
     };
 
     const filteredReturns = returns.filter(item => {

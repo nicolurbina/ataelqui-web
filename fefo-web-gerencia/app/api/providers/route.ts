@@ -4,21 +4,21 @@ import { collection, getDocs, query, addDoc } from 'firebase/firestore';
 
 export async function GET() {
     try {
-        const inventoryRef = collection(db, 'inventory');
-        const q = query(inventoryRef);
+        const providersRef = collection(db, 'providers');
+        const q = query(providersRef);
         const snapshot = await getDocs(q);
 
-        const inventory = snapshot.docs.map(doc => ({
+        const providers = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         }));
 
         return NextResponse.json({
             success: true,
-            data: inventory
+            data: providers
         });
     } catch (error: any) {
-        console.error('Error fetching inventory:', error);
+        console.error('Error fetching providers:', error);
         return NextResponse.json(
             { success: false, error: error.message },
             { status: 500 }
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     try {
         const data = await request.json();
 
-        const docRef = await addDoc(collection(db, 'inventory'), {
+        const docRef = await addDoc(collection(db, 'providers'), {
             ...data,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
             data: { id: docRef.id, ...data }
         });
     } catch (error: any) {
-        console.error('Error creating inventory item:', error);
+        console.error('Error creating provider:', error);
         return NextResponse.json(
             { success: false, error: error.message },
             { status: 500 }

@@ -39,6 +39,24 @@ export async function POST(request: Request) {
             updatedAt: new Date().toISOString()
         });
 
+        // If initial stock is provided, create an inventory entry
+        if (data.totalStock && Number(data.totalStock) > 0) {
+            await addDoc(collection(db, 'inventory'), {
+                productId: docRef.id,
+                productName: data.name,
+                sku: data.sku,
+                quantity: Number(data.totalStock),
+                initialQuantity: Number(data.totalStock),
+                batch: 'Lote Inicial',
+                expiryDate: null,
+                entryDate: new Date().toISOString(),
+                status: 'Disponible',
+                warehouse: data.warehouse || 'Bodega 1',
+                unitCost: 0,
+                createdAt: new Date().toISOString()
+            });
+        }
+
         return NextResponse.json({
             success: true,
             data: { id: docRef.id, ...data }
