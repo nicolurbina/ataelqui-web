@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { apiClient } from '@/utils/api';
+import { db } from '@/config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const Sidebar = () => {
     const pathname = usePathname();
@@ -16,38 +17,17 @@ const Sidebar = () => {
     const [notificationCount, setNotificationCount] = useState(0);
 
     useEffect(() => {
-        fetchNotifications();
+        // Real-time listener for unread notifications
+        const q = query(collection(db, 'notifications'), where('read', '==', false));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setNotificationCount(snapshot.size);
+        }, (error) => {
+            console.error("Error fetching notification count:", error);
+        });
+
+        return () => unsubscribe();
     }, []);
-
-    const fetchNotifications = async () => {
-        try {
-            // Fetch various alerts/counts
-            const [fefoRes, tasksRes, returnsRes] = await Promise.all([
-                apiClient.getFefoAlerts(),
-                apiClient.getTasks({ status: 'pending' }),
-                apiClient.getReturns({ status: 'pending' })
-            ]);
-
-            let count = 0;
-
-            if (fefoRes.success && fefoRes.data) {
-                count += (fefoRes.data as any).alertsCount || 0;
-            }
-
-            if (tasksRes.success && Array.isArray(tasksRes.data)) {
-                count += tasksRes.data.length;
-            }
-
-            if (returnsRes.success && Array.isArray(returnsRes.data)) {
-                count += returnsRes.data.length;
-            }
-
-            setNotificationCount(count);
-
-        } catch (error) {
-            console.error('Error fetching notifications:', error);
-        }
-    };
 
     const toggleMenu = (menu: string) => {
         setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));

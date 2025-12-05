@@ -1,4 +1,16 @@
-// API Client utilities para consumir la API desde el frontend
+import {
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where,
+  doc,
+  updateDoc,
+  deleteDoc,
+  orderBy,
+  limit
+} from 'firebase/firestore';
+import { db } from '@/config/firebase';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -79,7 +91,7 @@ class ApiClient {
     });
   }
 
-  // Inventory
+  // Inventory (API-based legacy)
   async getInventory(filters?: any) {
     const params = new URLSearchParams(filters).toString();
     return this.request(`/inventory${params ? '?' + params : ''}`);
@@ -96,18 +108,7 @@ class ApiClient {
     });
   }
 
-  async updateInventoryItem(id: string, data: any) {
-    return this.request(`/inventory/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteInventoryItem(id: string) {
-    return this.request(`/inventory/${id}`, {
-      method: 'DELETE',
-    });
-  }
+  // Note: updateInventoryItem and deleteInventoryItem are implemented below using Firestore directly
 
   async getFefoAlerts() {
     return this.request('/inventory/stats/fefo-alerts');
@@ -250,10 +251,63 @@ class ApiClient {
   }
 
   async saveConfig(data: any) {
-    return this.request('/config', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    try {
+      return await this.request('/config', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Inventory / Lots (Firestore Direct)
+  async getInventoryByProduct(productId: string) {
+    try {
+      const q = query(collection(db, 'inventory'), where('productId', '==', productId));
+      const snapshot = await getDocs(q);
+      const inventory = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      return { success: true, data: inventory };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async addInventoryItem(data: any) {
+    try {
+      const docRef = await addDoc(collection(db, 'inventory'), {
+        ...data,
+        createdAt: new Date().toISOString()
+      });
+      return { success: true, data: { id: docRef.id, ...data } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateInventoryItem(id: string, data: any) {
+    try {
+      const docRef = doc(db, 'inventory', id);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: new Date().toISOString()
+      });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteInventoryItem(id: string) {
+    try {
+      await deleteDoc(doc(db, 'inventory', id));
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   }
 }
 

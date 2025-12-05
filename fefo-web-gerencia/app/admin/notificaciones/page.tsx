@@ -1,31 +1,38 @@
 'use client';
 
-import React, { useState } from 'react';
-
-// Mock Data for Notifications with Timestamps
-const initialNotifications = [
-    // Hoy
-    { id: '1', type: 'FEFO', title: 'Alerta FEFO Crítica', message: 'Lote A-20 de "Levadura Fresca" vence en 5 días.', timestamp: new Date(), read: false, details: 'El lote A-20 ubicado en la Cámara de Frío tiene una fecha de vencimiento próxima (08/12/2025). Se recomienda priorizar su uso o gestionar una liquidación.' },
-    { id: '2', type: 'Stock', title: 'Stock Bajo', message: 'El producto "Azúcar Flor 1kg" ha llegado a su nivel mínimo.', timestamp: new Date(Date.now() - 1000 * 60 * 60), read: false, details: 'El stock actual es de 48 unidades, por debajo del mínimo establecido de 50.' },
-
-    // Ayer
-    { id: '3', type: 'Discrepancy', title: 'Discrepancia de Inventario', message: 'El conteo #50 difiere en 20 unidades respecto al sistema.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), read: true, details: 'El conteo realizado por Juan Pérez en Bodega 1 reportó 80 unidades, mientras que el sistema registra 100.' },
-    { id: '4', type: 'System', title: 'Respaldo Completado', message: 'El respaldo diario de la base de datos se realizó con éxito.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), read: true, details: 'Backup automático completado a las 02:00 AM.' },
-
-    // Esta Semana (2 days ago)
-    { id: '5', type: 'Stock', title: 'Pedido Recibido', message: 'Se ha recepcionado la orden de compra #1234.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), read: true, details: 'Recepción completa de 50 sacos de Harina.' },
-
-    // Anterior (10 days ago)
-    { id: '6', type: 'System', title: 'Mantenimiento Programado', message: 'El sistema estará en mantenimiento el domingo.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10), read: true, details: 'Ventana de mantenimiento de 00:00 a 04:00 AM.' },
-];
+import React, { useState, useEffect } from 'react';
+import { db } from '@/config/firebase';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, where, writeBatch } from 'firebase/firestore';
 
 export default function NotificationsPage() {
-    const [notifications, setNotifications] = useState(initialNotifications);
+    const [notifications, setNotifications] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('Todas');
     const [filterRead, setFilterRead] = useState('Todas');
     const [selectedNotification, setSelectedNotification] = useState<any>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Real-time listener for notifications
+        const q = query(collection(db, 'notifications'), orderBy('timestamp', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const notifs = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                // Convert Firestore Timestamp to JS Date
+                timestamp: doc.data().timestamp?.toDate() || new Date()
+            }));
+            setNotifications(notifs);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching notifications:", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -64,22 +71,44 @@ export default function NotificationsPage() {
         }
     };
 
-    const handleMarkAllAsRead = () => {
-        setNotifications(notifications.map(n => ({ ...n, read: true })));
-    };
+    const handleMarkAllAsRead = async () => {
+        const batch = writeBatch(db);
+        const unreadNotifications = notifications.filter(n => !n.read);
 
-    const handleViewDetail = (notification: any) => {
-        setSelectedNotification(notification);
-        setIsModalOpen(true);
-        if (!notification.read) {
-            setNotifications(notifications.map(n => n.id === notification.id ? { ...n, read: true } : n));
+        unreadNotifications.forEach(n => {
+            const ref = doc(db, 'notifications', n.id);
+            batch.update(ref, { read: true });
+        });
+
+        try {
+            await batch.commit();
+        } catch (error) {
+            console.error("Error marking all as read:", error);
         }
     };
 
-    const handleDelete = (id: string, e: React.MouseEvent) => {
+    const handleViewDetail = async (notification: any) => {
+        setSelectedNotification(notification);
+        setIsModalOpen(true);
+        if (!notification.read) {
+            try {
+                const ref = doc(db, 'notifications', notification.id);
+                await updateDoc(ref, { read: true });
+            } catch (error) {
+                console.error("Error marking as read:", error);
+            }
+        }
+    };
+
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setNotifications(notifications.filter(n => n.id !== id));
-        // Deleted without confirmation
+        if (confirm('¿Estás seguro de eliminar esta notificación?')) {
+            try {
+                await deleteDoc(doc(db, 'notifications', id));
+            } catch (error) {
+                console.error("Error deleting notification:", error);
+            }
+        }
     };
 
     // Filter Logic
@@ -96,7 +125,7 @@ export default function NotificationsPage() {
 
     // Grouping Logic
     const groupedNotifications = filteredNotifications.reduce((groups: any, notif) => {
-        const date = notif.timestamp ? new Date(notif.timestamp) : new Date();
+        const date = notif.timestamp;
         const today = new Date();
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
@@ -167,65 +196,71 @@ export default function NotificationsPage() {
             </div>
 
             <div className="max-w-4xl mx-auto space-y-8">
-                {groupOrder.map(group => {
-                    const items = groupedNotifications[group];
-                    if (!items || items.length === 0) return null;
+                {loading ? (
+                    <div className="text-center py-12 text-gray-500">Cargando notificaciones...</div>
+                ) : (
+                    <>
+                        {groupOrder.map(group => {
+                            const items = groupedNotifications[group];
+                            if (!items || items.length === 0) return null;
 
-                    return (
-                        <div key={group}>
-                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">{group}</h3>
-                            <div className="space-y-3">
-                                {items.map((notif: any) => (
-                                    <div
-                                        key={notif.id}
-                                        onClick={() => handleViewDetail(notif)}
-                                        className={`bg-white p-5 rounded-xl border shadow-sm flex gap-4 transition-all hover:shadow-md cursor-pointer ${notif.read ? 'border-gray-200 opacity-75' : 'border-orange-100 ring-1 ring-orange-50'}`}
-                                    >
-                                        <div className="flex-shrink-0">
-                                            {getIcon(notif.type)}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <h3 className={`text-base font-bold ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.title}</h3>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                                                        {notif.timestamp?.toLocaleTimeString ? notif.timestamp.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                    </span>
-                                                    <button
-                                                        onClick={(e) => handleDelete(notif.id, e)}
-                                                        className="text-gray-300 hover:text-red-500 transition-colors p-1"
-                                                        title="Eliminar notificación"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                        </svg>
-                                                    </button>
+                            return (
+                                <div key={group}>
+                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">{group}</h3>
+                                    <div className="space-y-3">
+                                        {items.map((notif: any) => (
+                                            <div
+                                                key={notif.id}
+                                                onClick={() => handleViewDetail(notif)}
+                                                className={`bg-white p-5 rounded-xl border shadow-sm flex gap-4 transition-all hover:shadow-md cursor-pointer ${notif.read ? 'border-gray-200 opacity-75' : 'border-orange-100 ring-1 ring-orange-50'}`}
+                                            >
+                                                <div className="flex-shrink-0">
+                                                    {getIcon(notif.type)}
                                                 </div>
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <h3 className={`text-base font-bold ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.title}</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                                                                {notif.timestamp?.toLocaleTimeString ? notif.timestamp.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                            </span>
+                                                            <button
+                                                                onClick={(e) => handleDelete(notif.id, e)}
+                                                                className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                                                title="Eliminar notificación"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600 leading-relaxed mb-3">{notif.message}</p>
+                                                    <span className="inline-flex items-center text-xs font-bold text-primary hover:text-orange-700 transition-colors">
+                                                        Ver detalle
+                                                        <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </span>
+                                                </div>
+                                                {!notif.read && (
+                                                    <div className="flex-shrink-0 self-center">
+                                                        <div className="w-2.5 h-2.5 bg-primary rounded-full"></div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <p className="text-sm text-gray-600 leading-relaxed mb-3">{notif.message}</p>
-                                            <span className="inline-flex items-center text-xs font-bold text-primary hover:text-orange-700 transition-colors">
-                                                Ver detalle
-                                                <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                </svg>
-                                            </span>
-                                        </div>
-                                        {!notif.read && (
-                                            <div className="flex-shrink-0 self-center">
-                                                <div className="w-2.5 h-2.5 bg-primary rounded-full"></div>
-                                            </div>
-                                        )}
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    );
-                })}
+                                </div>
+                            );
+                        })}
 
-                {Object.keys(groupedNotifications).length === 0 && (
-                    <div className="text-center py-12 text-gray-500">
-                        No hay notificaciones que coincidan con los filtros.
-                    </div>
+                        {Object.keys(groupedNotifications).length === 0 && (
+                            <div className="text-center py-12 text-gray-500">
+                                No hay notificaciones que coincidan con los filtros.
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 

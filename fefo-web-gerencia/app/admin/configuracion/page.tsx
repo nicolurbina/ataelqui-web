@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiClient } from '@/utils/api';
+import { createNotification } from '@/utils/notifications';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('users');
@@ -35,11 +36,23 @@ export default function SettingsPage() {
     const [isEditProviderModalOpen, setIsEditProviderModalOpen] = useState(false);
     const [editingProvider, setEditingProvider] = useState<any>(null);
 
+    // Product & Lots State
+    const [selectedProduct, setSelectedProduct] = useState<any>(null);
+    const [productLots, setProductLots] = useState<any[]>([]);
+    const [isLotModalOpen, setIsLotModalOpen] = useState(false);
+    const [newLot, setNewLot] = useState({
+        batch: '',
+        quantity: '' as string | number,
+        expiryDate: '',
+        unitCost: '' as string | number
+    });
+    const [editingLotId, setEditingLotId] = useState<string | null>(null);
+
     // Fetch Data based on tab
     useEffect(() => {
         if (activeTab === 'providers') {
             fetchProviders();
-        } else if (activeTab === 'params') {
+        } else if (activeTab === 'params' || activeTab === 'products') {
             fetchConfig();
             fetchProducts();
         }
@@ -84,16 +97,59 @@ export default function SettingsPage() {
         }
     };
 
-    const handleAddException = () => {
-        if (!newException.productId || !newException.days || !newException.warningDays) return;
-        setExceptions([...exceptions, { ...newException }]);
-        setNewException({ productId: '', productName: '', days: '', warningDays: '' });
+    const fetchProductLots = async (productId: string) => {
+        try {
+            const response = await apiClient.getInventoryByProduct(productId);
+            if (response.success) {
+                setProductLots(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching lots:', error);
+        }
     };
 
-    const handleRemoveException = (index: number) => {
+    const handleAddException = async () => {
+        if (!newException.productId || !newException.days) return;
+
+        const updatedExceptions = [...exceptions, { ...newException, warningDays: warningDays }];
+        setExceptions(updatedExceptions);
+
+        // Save immediately
+        await apiClient.saveConfig({
+            criticalDays: fefoDays,
+            warningDays: warningDays,
+            exceptions: updatedExceptions
+        });
+
+        // Create Notification
+        await createNotification(
+            'System',
+            'Excepción Agregada',
+            `Se agregó una excepción para el producto "${newException.productName}".`,
+            `Días críticos: ${newException.days}.`
+        );
+
+        setNewException({ productId: '', productName: '', days: '', warningDays: '' });
+        alert('Excepción agregada correctamente.');
+    };
+
+    const handleRemoveException = async (index: number) => {
+        const removed = exceptions[index];
         const newExceptions = [...exceptions];
         newExceptions.splice(index, 1);
         setExceptions(newExceptions);
+
+        await apiClient.saveConfig({
+            criticalDays: fefoDays,
+            warningDays: warningDays,
+            exceptions: newExceptions
+        });
+
+        await createNotification(
+            'System',
+            'Excepción Eliminada',
+            `Se eliminó la excepción para el producto "${removed.productName}".`
+        );
     };
 
     const handleSaveConfig = async () => {
@@ -104,6 +160,11 @@ export default function SettingsPage() {
                 exceptions
             });
             if (response.success) {
+                await createNotification(
+                    'System',
+                    'Configuración Actualizada',
+                    'Se han actualizado los parámetros globales del sistema.'
+                );
                 alert('Configuración guardada exitosamente');
             } else {
                 alert('Error al guardar configuración');
@@ -112,6 +173,119 @@ export default function SettingsPage() {
             console.error('Error saving config:', error);
             alert('Error al guardar configuración');
         }
+    };
+
+    // Lot Management Handlers
+    const openLotModal = (product: any) => {
+        setSelectedProduct(product);
+        fetchProductLots(product.id);
+        setIsLotModalOpen(true);
+    };
+
+    const handleAddLot = async () => {
+        if (!selectedProduct || !newLot.batch || !newLot.quantity || !newLot.expiryDate) {
+            alert('Por favor complete todos los campos obligatorios');
+            return;
+        }
+
+        try {
+            const lotData = {
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                batch: newLot.batch,
+                quantity: Number(newLot.quantity),
+                expiryDate: newLot.expiryDate,
+                unitCost: Number(newLot.unitCost),
+                status: 'Disponible'
+            };
+
+            let response;
+            if (editingLotId) {
+                response = await apiClient.updateInventoryItem(editingLotId, lotData);
+            } else {
+                response = await apiClient.addInventoryItem(lotData);
+            }
+
+            if (response.success) {
+                // Notify
+                if (!editingLotId) {
+                    // 1. Stock Notification
+                    await createNotification(
+                        'Stock',
+                        'Nuevo Lote Agregado',
+                        `Se agregó el lote ${newLot.batch} al producto ${selectedProduct.name}`,
+                        `Cantidad: ${newLot.quantity}`
+                    );
+
+                    // 2. FEFO Alert Logic
+                    const today = new Date();
+                    const expiry = new Date(newLot.expiryDate);
+                    const diffTime = expiry.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    // Check for specific product exception or use global settings
+                    const exception = exceptions.find(ex => ex.productId === selectedProduct.id);
+                    const criticalThreshold = exception ? parseInt(exception.days) : fefoDays;
+                    const warningThreshold = warningDays;
+
+                    if (diffDays <= criticalThreshold) {
+                        await createNotification(
+                            'FEFO',
+                            'Alerta Crítica de Vencimiento',
+                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
+                            `Vence el: ${newLot.expiryDate}. Umbral crítico: ${criticalThreshold} días.`
+                        );
+                    } else if (diffDays <= warningThreshold) {
+                        await createNotification(
+                            'FEFO',
+                            'Alerta Preventiva de Vencimiento',
+                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
+                            `Vence el: ${newLot.expiryDate}. Umbral preventivo: ${warningThreshold} días.`
+                        );
+                    }
+                }
+
+                fetchProductLots(selectedProduct.id);
+                setNewLot({ batch: '', quantity: '', expiryDate: '', unitCost: '' });
+                setEditingLotId(null);
+            } else {
+                alert('Error al guardar lote');
+            }
+        } catch (error) {
+            console.error('Error saving lot:', error);
+            alert('Error al guardar lote');
+        }
+    };
+
+    const handleEditLot = (lot: any) => {
+        setNewLot({
+            batch: lot.batch,
+            quantity: lot.quantity,
+            expiryDate: lot.expiryDate,
+            unitCost: lot.unitCost
+        });
+        setEditingLotId(lot.id);
+    };
+
+    const handleDeleteLot = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar este lote?')) return;
+
+        try {
+            const response = await apiClient.deleteInventoryItem(id);
+            if (response.success) {
+                fetchProductLots(selectedProduct.id);
+            } else {
+                alert('Error al eliminar lote');
+            }
+        } catch (error) {
+            console.error('Error deleting lot:', error);
+            alert('Error al eliminar lote');
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setNewLot({ batch: '', quantity: '', expiryDate: '', unitCost: '' });
+        setEditingLotId(null);
     };
 
     // Helper Functions
@@ -318,6 +492,13 @@ export default function SettingsPage() {
                         }`}
                 >
                     Proveedores
+                </button>
+                <button
+                    onClick={() => setActiveTab('products')}
+                    className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'products' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                >
+                    Productos y Lotes
                 </button>
                 <button
                     onClick={() => setActiveTab('params')}
@@ -586,6 +767,49 @@ export default function SettingsPage() {
                                 ) : (
                                     <tr>
                                         <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No hay proveedores registrados.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : activeTab === 'products' ? (
+                <div className="space-y-6">
+                    {/* Products Table */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                    <th className="px-6 py-4">Código (SKU)</th>
+                                    <th className="px-6 py-4">Nombre</th>
+                                    <th className="px-6 py-4">Marca</th>
+                                    <th className="px-6 py-4">Categoría</th>
+                                    <th className="px-6 py-4">Unidad</th>
+                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {products.length > 0 ? (
+                                    products.map((product) => (
+                                        <tr key={product.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 text-sm font-mono text-blue-600">{product.sku}</td>
+                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{product.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500">{product.brand || '-'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500">{product.category || '-'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-500">{product.unit || 'UN'}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button
+                                                    onClick={() => openLotModal(product)}
+                                                    className="px-3 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors"
+                                                >
+                                                    Gestionar Lotes
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No hay productos registrados.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -866,6 +1090,142 @@ export default function SettingsPage() {
                                 >
                                     Guardar Cambios
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Lot Management Modal */}
+            {isLotModalOpen && selectedProduct && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Gestión de Lotes</h3>
+                                <p className="text-sm text-gray-500">{selectedProduct.name} ({selectedProduct.sku})</p>
+                            </div>
+                            <button onClick={() => setIsLotModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            {/* Add New Lot */}
+                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">{editingLotId ? 'Editar Lote' : 'Agregar Nuevo Lote'}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">N° Lote</label>
+                                        <input
+                                            type="text"
+                                            value={newLot.batch}
+                                            onChange={(e) => setNewLot({ ...newLot, batch: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                            placeholder="L-123"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Vencimiento</label>
+                                        <input
+                                            type="date"
+                                            value={newLot.expiryDate}
+                                            onChange={(e) => setNewLot({ ...newLot, expiryDate: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Cantidad</label>
+                                        <input
+                                            type="number"
+                                            value={newLot.quantity}
+                                            onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Costo Unit.</label>
+                                        <input
+                                            type="number"
+                                            value={newLot.unitCost}
+                                            onChange={(e) => setNewLot({ ...newLot, unitCost: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1 flex gap-2">
+                                        {editingLotId && (
+                                            <button
+                                                onClick={handleCancelEdit}
+                                                className="flex-1 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={handleAddLot}
+                                            className={`flex-1 py-2 text-white font-bold rounded-lg transition-colors text-sm ${editingLotId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                        >
+                                            {editingLotId ? 'Actualizar' : '+ Agregar'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Lots List */}
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">Lotes Existentes</h4>
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-100 text-xs text-gray-500 uppercase font-bold">
+                                            <tr>
+                                                <th className="px-4 py-3">Lote</th>
+                                                <th className="px-4 py-3">Vencimiento</th>
+                                                <th className="px-4 py-3 text-right">Cantidad</th>
+                                                <th className="px-4 py-3 text-right">Costo</th>
+                                                <th className="px-4 py-3 text-center">Estado</th>
+                                                <th className="px-4 py-3 text-right">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {productLots.length > 0 ? (
+                                                productLots.map((lot) => (
+                                                    <tr key={lot.id}>
+                                                        <td className="px-4 py-3 font-medium text-gray-900">{lot.batch}</td>
+                                                        <td className="px-4 py-3 text-gray-600">{lot.expiryDate}</td>
+                                                        <td className="px-4 py-3 text-right font-bold">{lot.quantity}</td>
+                                                        <td className="px-4 py-3 text-right text-gray-500">${lot.unitCost}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">
+                                                                {lot.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handleEditLot(lot)}
+                                                                    className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteLot(lot.id)}
+                                                                    className="text-red-600 hover:text-red-800 font-medium text-xs"
+                                                                >
+                                                                    Eliminar
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">No hay lotes registrados para este producto.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
