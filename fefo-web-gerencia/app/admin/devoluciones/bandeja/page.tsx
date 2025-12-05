@@ -25,9 +25,10 @@ export default function SettlementTrayPage() {
                 const mappedReturns = (response.data as any[]).map(item => ({
                     id: item.id,
                     date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
-                    vehicle: 'N/A', // Not available in current API
-                    route: 'General', // Not available in current API
+                    vehicle: item.vehicle || 'N/A',
+                    route: item.route || 'General', // Display actual route
                     user: item.requestedBy || 'Desconocido',
+                    driver: item.driver || 'N/A',
                     status: item.status,
                     items: 1, // Treating each request as 1 item for now
                     // Details for expansion
@@ -156,6 +157,7 @@ export default function SettlementTrayPage() {
                             <th className="px-6 py-4">Fecha</th>
                             <th className="px-6 py-4">Vehículo</th>
                             <th className="px-6 py-4">Ruta</th>
+                            <th className="px-6 py-4">Cliente</th>
                             <th className="px-6 py-4">Bodeguero/Chofer</th>
                             <th className="px-6 py-4 text-center">Items</th>
                             <th className="px-6 py-4 text-center">Estado</th>
@@ -179,7 +181,8 @@ export default function SettlementTrayPage() {
                                         <td className="px-6 py-4 text-sm text-gray-500">{item.date}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.vehicle}</td>
                                         <td className="px-6 py-4 text-sm text-gray-600">{item.route}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{item.user}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700 font-medium">{item.user}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{item.driver}</td>
                                         <td className="px-6 py-4 text-center text-sm font-bold text-gray-700">{item.items}</td>
                                         <td className="px-6 py-4 text-center">
                                             {getStatusBadge(item.status)}

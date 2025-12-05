@@ -243,6 +243,18 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Configuration
+  async getConfig() {
+    return this.request('/config');
+  }
+
+  async saveConfig(data: any) {
+    return this.request('/config', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

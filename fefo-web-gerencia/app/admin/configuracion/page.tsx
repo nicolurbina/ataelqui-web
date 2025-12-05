@@ -7,6 +7,10 @@ import { apiClient } from '@/utils/api';
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('users');
     const [fefoDays, setFefoDays] = useState(7);
+    const [warningDays, setWarningDays] = useState(30);
+    const [exceptions, setExceptions] = useState<any[]>([]);
+    const [newException, setNewException] = useState({ productId: '', productName: '', days: '', warningDays: '' });
+    const [products, setProducts] = useState<any[]>([]);
 
     // User State (Existing Mock/Local)
     const [users, setUsers] = useState([
@@ -31,10 +35,13 @@ export default function SettingsPage() {
     const [isEditProviderModalOpen, setIsEditProviderModalOpen] = useState(false);
     const [editingProvider, setEditingProvider] = useState<any>(null);
 
-    // Fetch Providers when tab is active
+    // Fetch Data based on tab
     useEffect(() => {
         if (activeTab === 'providers') {
             fetchProviders();
+        } else if (activeTab === 'params') {
+            fetchConfig();
+            fetchProducts();
         }
     }, [activeTab]);
 
@@ -49,6 +56,61 @@ export default function SettingsPage() {
             console.error('Error fetching providers:', error);
         } finally {
             setLoadingProviders(false);
+        }
+    };
+
+    const fetchConfig = async () => {
+        try {
+            const response = await apiClient.getConfig();
+            if (response.success && response.data) {
+                const data = response.data as any;
+                setFefoDays(data.criticalDays || 7);
+                setWarningDays(data.warningDays || 30);
+                setExceptions(data.exceptions || []);
+            }
+        } catch (error) {
+            console.error('Error fetching config:', error);
+        }
+    };
+
+    const fetchProducts = async () => {
+        try {
+            const response = await apiClient.getProducts();
+            if (response.success) {
+                setProducts(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
+
+    const handleAddException = () => {
+        if (!newException.productId || !newException.days || !newException.warningDays) return;
+        setExceptions([...exceptions, { ...newException }]);
+        setNewException({ productId: '', productName: '', days: '', warningDays: '' });
+    };
+
+    const handleRemoveException = (index: number) => {
+        const newExceptions = [...exceptions];
+        newExceptions.splice(index, 1);
+        setExceptions(newExceptions);
+    };
+
+    const handleSaveConfig = async () => {
+        try {
+            const response = await apiClient.saveConfig({
+                criticalDays: fefoDays,
+                warningDays: warningDays,
+                exceptions
+            });
+            if (response.success) {
+                alert('Configuración guardada exitosamente');
+            } else {
+                alert('Error al guardar configuración');
+            }
+        } catch (error) {
+            console.error('Error saving config:', error);
+            alert('Error al guardar configuración');
         }
     };
 
@@ -556,7 +618,8 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="number"
-                                        defaultValue={30}
+                                        value={warningDays}
+                                        onChange={(e) => setWarningDays(parseInt(e.target.value))}
                                         className="w-24 px-4 py-2 border border-gray-300 rounded-lg text-center font-bold text-gray-900 focus:ring-2 focus:ring-primary"
                                     />
                                     <span className="text-sm text-gray-600">días</span>
@@ -571,18 +634,35 @@ export default function SettingsPage() {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                                         <div className="md:col-span-1">
                                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Producto</label>
-                                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary">
-                                                <option>Seleccionar...</option>
-                                                <option>Levadura Fresca 500g</option>
-                                                <option>Crema Pastelera</option>
+                                            <select
+                                                value={newException.productId}
+                                                onChange={(e) => {
+                                                    const product = products.find(p => p.id === e.target.value);
+                                                    setNewException({ ...newException, productId: e.target.value, productName: product?.name || '' });
+                                                }}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                            >
+                                                <option value="">Seleccionar...</option>
+                                                {products.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
                                             </select>
                                         </div>
                                         <div className="md:col-span-1">
                                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Días Críticos</label>
-                                            <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary" placeholder="Ej: 3" />
+                                            <input
+                                                type="number"
+                                                value={newException.days}
+                                                onChange={(e) => setNewException({ ...newException, days: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                                placeholder="Ej: 3"
+                                            />
                                         </div>
                                         <div className="md:col-span-1">
-                                            <button className="w-full py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+                                            <button
+                                                onClick={handleAddException}
+                                                className="w-full py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                                            >
                                                 + Agregar Excepción
                                             </button>
                                         </div>
@@ -600,20 +680,36 @@ export default function SettingsPage() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            <tr>
-                                                <td className="px-4 py-3 font-medium text-gray-900">Levadura Fresca 500g</td>
-                                                <td className="px-4 py-3 text-center font-bold text-red-600">3 días</td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <button className="text-red-500 hover:text-red-700 text-xs font-bold">Eliminar</button>
-                                                </td>
-                                            </tr>
+                                            {exceptions.length > 0 ? (
+                                                exceptions.map((ex, index) => (
+                                                    <tr key={index}>
+                                                        <td className="px-4 py-3 font-medium text-gray-900">{ex.productName}</td>
+                                                        <td className="px-4 py-3 text-center font-bold text-red-600">{ex.days} días</td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <button
+                                                                onClick={() => handleRemoveException(index)}
+                                                                className="text-red-500 hover:text-red-700 text-xs font-bold"
+                                                            >
+                                                                Eliminar
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={3} className="px-4 py-3 text-center text-gray-500">No hay excepciones configuradas.</td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
 
                             <div className="pt-6">
-                                <button className="px-6 py-2 bg-gray-900 text-white font-bold rounded-lg hover:bg-gray-800 transition-colors shadow-md">
+                                <button
+                                    onClick={handleSaveConfig}
+                                    className="px-6 py-2 bg-gray-900 text-white font-bold rounded-lg hover:bg-gray-800 transition-colors shadow-md"
+                                >
                                     Guardar Cambios
                                 </button>
                             </div>

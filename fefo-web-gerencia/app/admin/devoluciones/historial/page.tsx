@@ -14,6 +14,8 @@ export default function ReturnsHistoryPage() {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
     useEffect(() => {
         fetchHistory();
     }, []);
@@ -33,7 +35,8 @@ export default function ReturnsHistoryPage() {
                     items: item.quantity || 1,
                     status: item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobado' : item.status === 'rejected' ? 'Rechazado' : item.status,
                     total: '$0', // Placeholder as cost isn't in simple return object yet
-                    reason: item.reason || 'Sin motivo'
+                    reason: item.reason || 'Sin motivo',
+                    evidenceUrl: item.evidenceUrl
                 }));
                 setHistory(mappedHistory);
             }
@@ -144,12 +147,13 @@ export default function ReturnsHistoryPage() {
                             <th className="px-6 py-4 text-center">Items</th>
                             <th className="px-6 py-4 text-right">Monto Estimado</th>
                             <th className="px-6 py-4 text-center">Estado</th>
+                            <th className="px-6 py-4 text-center">Evidencia</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr>
-                                <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">Cargando historial...</td>
+                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">Cargando historial...</td>
                             </tr>
                         ) : filteredHistory.length > 0 ? (
                             filteredHistory.map((item) => (
@@ -163,11 +167,30 @@ export default function ReturnsHistoryPage() {
                                     <td className="px-6 py-4 text-center">
                                         {getStatusBadge(item.status)}
                                     </td>
+                                    <td className="px-6 py-4 text-center">
+                                        {item.evidenceUrl ? (
+                                            <button
+                                                onClick={() => setSelectedImage(item.evidenceUrl)}
+                                                className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                title="Ver Evidencia"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </button>
+                                        ) : (
+                                            <span className="text-gray-300">
+                                                <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </span>
+                                        )}
+                                    </td>
                                 </tr>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">
+                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">
                                     No se encontraron resultados para los filtros seleccionados.
                                 </td>
                             </tr>
@@ -175,6 +198,28 @@ export default function ReturnsHistoryPage() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Image Modal */}
+            {selectedImage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
+                    <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center">
+                        <button
+                            onClick={() => setSelectedImage(null)}
+                            className="absolute top-4 right-4 text-white hover:text-gray-300 z-50"
+                        >
+                            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <img
+                            src={selectedImage}
+                            alt="Evidencia"
+                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

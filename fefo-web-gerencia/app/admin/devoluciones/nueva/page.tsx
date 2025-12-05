@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from '@/components/ui/DatePicker';
 import { apiClient } from '@/utils/api';
 import { useRouter } from 'next/navigation';
+import { db } from '@/config/firebase';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 
 export default function NewReturnPage() {
     const router = useRouter();
@@ -11,6 +13,9 @@ export default function NewReturnPage() {
     const [documentType, setDocumentType] = useState('Factura');
     const [formData, setFormData] = useState({
         client: '',
+        driver: '',
+        route: '',
+        comments: '',
         documentNumber: '',
         vehicle: ''
     });
@@ -70,35 +75,49 @@ export default function NewReturnPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (items.length === 0) {
-            alert('Debe agregar al menos un producto');
-            return;
+
+        let itemsToSubmit = [...items];
+
+        // UX Improvement: If no items added but form is filled, add it automatically
+        if (itemsToSubmit.length === 0) {
+            if (currentItem.productId && currentItem.quantity > 0 && currentItem.reason) {
+                itemsToSubmit.push({ ...currentItem, id: Date.now() });
+            } else {
+                alert('Debe agregar al menos un producto');
+                return;
+            }
         }
 
         try {
-            // Create a return request for each item (simplification, or backend handles bulk)
-            // Assuming backend creates one return request per call, or we loop.
-            // For this UI, let's assume we create one "Return Request" that contains multiple items,
-            // OR we loop and create individual requests as per the current simple API structure.
+            // Save Data to Firestore (Direct Client-Side Write)
+            const returnsRef = collection(db, 'returns');
 
-            // Current API `createReturn` seems to take a single object. 
-            // Let's loop for now to be safe with the simple API structure we inferred.
-            for (const item of items) {
-                await apiClient.createReturn({
+            for (const item of itemsToSubmit) {
+                const newReturn = {
                     productId: item.productId,
                     quantity: item.quantity,
                     reason: item.reason,
                     status: 'pending',
-                    requestedBy: formData.client || 'Cliente Directo', // Using client name as requester
-                    // Additional metadata could be passed if API supports it (vehicle, document, etc.)
-                });
+                    requestedBy: formData.client || 'Cliente Directo',
+                    driver: formData.driver || 'N/A',
+                    route: formData.route || 'Web',
+                    comments: formData.comments,
+                    vehicle: formData.vehicle,
+                    documentType: documentType,
+                    documentNumber: formData.documentNumber,
+                    returnDate: date ? date.toISOString() : new Date().toISOString(),
+                    evidenceUrl: '', // No evidence upload
+                    createdAt: Timestamp.now()
+                };
+
+                await addDoc(returnsRef, newReturn);
             }
 
             alert('Devolución registrada exitosamente');
-            router.push('/admin/devoluciones/bandeja'); // Redirect to inbox
-        } catch (error) {
+            router.push('/admin/devoluciones/bandeja');
+        } catch (error: any) {
             console.error('Error creating return:', error);
-            alert('Error al registrar la devolución');
+            alert(`Error al registrar la devolución: ${error.message || 'Error desconocido'}`);
         }
     };
 
@@ -123,6 +142,18 @@ export default function NewReturnPage() {
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Nombre del Cliente..."
                                     required
+                                />
+                            </div>
+
+                            {/* Chofer / Bodeguero */}
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Chofer / Bodeguero</label>
+                                <input
+                                    type="text"
+                                    value={formData.driver}
+                                    onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Nombre del Chofer o Bodeguero..."
                                 />
                             </div>
 
@@ -167,6 +198,30 @@ export default function NewReturnPage() {
                                     onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Ej: Citroen, Camión 01..."
+                                />
+                            </div>
+
+                            {/* Ruta */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Ruta</label>
+                                <input
+                                    type="text"
+                                    value={formData.route}
+                                    onChange={(e) => setFormData({ ...formData, route: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Ej: Ruta Norte, Viernes..."
+                                />
+                            </div>
+
+                            {/* Observaciones */}
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones / Descripción del Motivo</label>
+                                <textarea
+                                    value={formData.comments}
+                                    onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                                    placeholder="Detalles adicionales sobre la devolución..."
+                                    rows={3}
                                 />
                             </div>
                         </div>
@@ -241,8 +296,8 @@ export default function NewReturnPage() {
                                         <span className="text-sm font-medium text-gray-700">{item.quantity}x {item.productName}</span>
                                         <div className="flex items-center gap-3">
                                             <span className={`text-xs font-semibold px-2 py-1 rounded ${item.reason === 'Producto Vencido' ? 'text-red-600 bg-red-50' :
-                                                    item.reason === 'Envase Dañado' ? 'text-orange-600 bg-orange-50' :
-                                                        'text-blue-600 bg-blue-50'
+                                                item.reason === 'Envase Dañado' ? 'text-orange-600 bg-orange-50' :
+                                                    'text-blue-600 bg-blue-50'
                                                 }`}>
                                                 {item.reason}
                                             </span>
