@@ -7,6 +7,7 @@ import inventoryRoutes from './routes/inventory.js';
 import returnsRoutes from './routes/returns.js';
 import tasksRoutes from './routes/tasks.js';
 import usersRoutes from './routes/users.js';
+import providersRoutes from './routes/providers.js';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/returns', returnsRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/providers', providersRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

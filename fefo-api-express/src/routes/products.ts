@@ -10,7 +10,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const db = getFirebaseDB();
     const snapshot = await db.collection('products').get();
-    
+
     const products: Product[] = [];
     snapshot.forEach((doc: QueryDocumentSnapshot) => {
       products.push({
@@ -38,7 +38,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const db = getFirebaseDB();
     const doc = await db.collection('products').doc(req.params.id).get();
-    
+
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -64,10 +64,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create product
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, sku, category, price, cost, description } = req.body;
+    const { name, sku, category, price, cost, description, brand, unit } = req.body;
 
-    // Validate required fields
-    if (!name || !sku || !category || !price || !cost) {
+    // Validate required fields (allow 0 for price/cost)
+    if (!name || !sku || !category || price === undefined || cost === undefined) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -82,6 +82,8 @@ router.post('/', async (req: Request, res: Response) => {
       price,
       cost,
       description,
+      brand: brand || '',
+      unit: unit || 'UN',
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -109,7 +111,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   try {
     const db = getFirebaseDB();
     const productRef = db.collection('products').doc(req.params.id);
-    
+
     const doc = await productRef.get();
     if (!doc.exists) {
       return res.status(404).json({
@@ -147,7 +149,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const db = getFirebaseDB();
     const productRef = db.collection('products').doc(req.params.id);
-    
+
     const doc = await productRef.get();
     if (!doc.exists) {
       return res.status(404).json({

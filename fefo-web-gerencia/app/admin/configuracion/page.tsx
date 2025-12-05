@@ -14,11 +14,7 @@ export default function SettingsPage() {
     const [products, setProducts] = useState<any[]>([]);
 
     // User State (Existing Mock/Local)
-    const [users, setUsers] = useState([
-        { id: '1', name: 'Juan Pérez', email: 'juan@ataelqui.cl', role: 'Bodeguero', status: 'Activo' },
-        { id: '2', name: 'Maria Gomez', email: 'maria@ataelqui.cl', role: 'Supervisor', status: 'Activo' },
-        { id: '3', name: 'Pedro Soto', email: 'pedro@ataelqui.cl', role: 'Bodeguero', status: 'Inactivo' },
-    ]);
+    const [users, setUsers] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Bodeguero' });
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
@@ -46,11 +42,27 @@ export default function SettingsPage() {
         expiryDate: '',
         unitCost: '' as string | number
     });
+
     const [editingLotId, setEditingLotId] = useState<string | null>(null);
+
+    // Products State (New)
+    const [newProduct, setNewProduct] = useState({
+        name: '',
+        sku: '',
+        brand: '',
+        category: '',
+        unit: 'UN',
+        price: '',
+        cost: '',
+        description: ''
+    });
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
     // Fetch Data based on tab
     useEffect(() => {
-        if (activeTab === 'providers') {
+        if (activeTab === 'users') {
+            fetchUsers();
+        } else if (activeTab === 'providers') {
             fetchProviders();
         } else if (activeTab === 'params' || activeTab === 'products') {
             fetchConfig();
@@ -69,6 +81,17 @@ export default function SettingsPage() {
             console.error('Error fetching providers:', error);
         } finally {
             setLoadingProviders(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const response = await apiClient.getUsers();
+            if (response.success) {
+                setUsers(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
         }
     };
 
@@ -470,6 +493,124 @@ export default function SettingsPage() {
         reader.readAsBinaryString(file);
     };
 
+    // Product Handlers
+    const handleCreateProduct = async () => {
+        if (!newProduct.name || !newProduct.sku) {
+            alert('Nombre y SKU son obligatorios');
+            return;
+        }
+
+        try {
+            const response = await apiClient.createProduct({
+                ...newProduct,
+                price: Number(newProduct.price) || 0,
+                cost: Number(newProduct.cost) || 0
+            });
+
+            if (response.success) {
+                fetchProducts();
+                setNewProduct({
+                    name: '',
+                    sku: '',
+                    brand: '',
+                    category: '',
+                    unit: 'UN',
+                    price: '',
+                    cost: '',
+                    description: ''
+                });
+                setIsProductModalOpen(false);
+                alert('Producto creado exitosamente');
+            } else {
+                alert('Error al crear producto: ' + response.error);
+            }
+        } catch (error) {
+            console.error('Error creating product:', error);
+            alert('Error al crear producto');
+        }
+    };
+
+    const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const json = JSON.parse(evt.target?.result as string);
+                if (Array.isArray(json)) {
+                    let successCount = 0;
+                    for (const item of json) {
+                        if (item.name && item.sku) {
+                            try {
+                                await apiClient.createProduct(item);
+                                successCount++;
+                            } catch (err) {
+                                console.error('Error importing product:', item, err);
+                            }
+                        }
+                    }
+                    if (successCount > 0) {
+                        alert(`Se importaron ${successCount} productos exitosamente.`);
+                        fetchProducts();
+                    } else {
+                        alert('No se pudieron importar productos.');
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
+                alert('Error al leer el archivo JSON');
+            }
+            // Reset input
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    const loadSeedData = async () => {
+        if (!confirm('¿Cargar datos de ejemplo (captura de pantalla)? Esto agregará productos a la base de datos.')) return;
+
+        try {
+            const response = await fetch('/products_seed.json'); // Assuming we can serve it or just import it dynamically if placed in public
+            // Since we placed it in the root, let's try to import it directly or just hardcode the fetch if it was in public. 
+            // Actually, for simplicity in this environment, I'll just fetch it if I move it to public, OR I can just hardcode the data here for the "Quick Load" button.
+            // But wait, I put it in the root. Let's move it to public or just read it via an API route? 
+            // Client-side cannot read root files directly. 
+            // I will implement a quick "Load Screenshot Data" button that uses the data I already know.
+
+            const seedData = [
+                { "sku": "7506195144947", "name": "Jdjs", "brand": "-", "category": "Hshs", "unit": "UN" },
+                { "sku": "4r", "name": "H and", "brand": "-", "category": "Grasas", "unit": "UN" },
+                { "sku": "1", "name": "Pan", "brand": "-", "category": "Insumos", "unit": "UN" },
+                { "sku": "50146", "name": "caravella aljafor", "brand": "-", "category": "Insumos", "unit": "UN" },
+                { "sku": "731199054801", "name": "Cafe", "brand": "-", "category": "Repostería", "unit": "UN" },
+                { "sku": "7807910030782", "name": "Ñññññññññ", "brand": "-", "category": "Insumos", "unit": "UN" },
+                { "sku": "5ur", "name": "Harina", "brand": "-", "category": "Grasas", "unit": "UN" },
+                { "sku": "123", "name": "Y", "brand": "-", "category": "Insumos", "unit": "UN" },
+                { "sku": "exp://10.35.6.160:8081", "name": "Kslskslslksa", "brand": "-", "category": "Insumos", "unit": "UN" },
+                { "sku": "52415", "name": "pastelera plus", "brand": "-", "category": "Insumos", "unit": "UN" }
+            ];
+
+            let successCount = 0;
+            for (const item of seedData) {
+                // Check if exists first to avoid duplicates? API might handle it or just create new.
+                // For now, just create.
+                try {
+                    await apiClient.createProduct({ ...item, price: 0, cost: 0, description: '' });
+                    successCount++;
+                } catch (err) {
+                    console.error('Error seeding:', err);
+                }
+            }
+            alert(`Se cargaron ${successCount} productos de ejemplo.`);
+            fetchProducts();
+
+        } catch (error) {
+            console.error('Error loading seed data:', error);
+            alert('Error al cargar datos de ejemplo');
+        }
+    };
+
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
             <div className="mb-6">
@@ -775,6 +916,42 @@ export default function SettingsPage() {
                 </div>
             ) : activeTab === 'products' ? (
                 <div className="space-y-6">
+                    {/* Product Actions */}
+                    <div className="flex justify-end gap-3">
+                        <button
+                            onClick={loadSeedData}
+                            className="flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 border border-yellow-200 rounded-lg text-sm font-bold hover:bg-yellow-200 shadow-sm transition-colors"
+                        >
+                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            Cargar Datos Captura
+                        </button>
+                        <div className="relative">
+                            <input
+                                type="file"
+                                accept=".json"
+                                onChange={handleProductFileUpload}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <button className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors">
+                                <svg className="w-5 h-5 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Carga Masiva (JSON)
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setIsProductModalOpen(true)}
+                            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-orange-700 shadow-sm transition-colors"
+                        >
+                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Crear Producto
+                        </button>
+                    </div>
+
                     {/* Products Table */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                         <table className="w-full text-left border-collapse">
@@ -1226,6 +1403,117 @@ export default function SettingsPage() {
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Create Product Modal */}
+            {isProductModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">Nuevo Producto</h3>
+                            <button onClick={() => setIsProductModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                                    <input
+                                        type="text"
+                                        value={newProduct.name}
+                                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                        placeholder="Ej: Harina"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">SKU / Código *</label>
+                                    <input
+                                        type="text"
+                                        value={newProduct.sku}
+                                        onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                        placeholder="Ej: 780..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
+                                    <input
+                                        type="text"
+                                        value={newProduct.brand}
+                                        onChange={(e) => setNewProduct({ ...newProduct, brand: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                                    <input
+                                        type="text"
+                                        value={newProduct.category}
+                                        onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Unidad</label>
+                                    <select
+                                        value={newProduct.unit}
+                                        onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    >
+                                        <option value="UN">Unidad (UN)</option>
+                                        <option value="KG">Kilogramo (KG)</option>
+                                        <option value="L">Litro (L)</option>
+                                        <option value="CJ">Caja (CJ)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio</label>
+                                    <input
+                                        type="number"
+                                        value={newProduct.price}
+                                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Costo</label>
+                                    <input
+                                        type="number"
+                                        value={newProduct.cost}
+                                        onChange={(e) => setNewProduct({ ...newProduct, cost: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                                <textarea
+                                    value={newProduct.description}
+                                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    rows={3}
+                                />
+                            </div>
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsProductModalOpen(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCreateProduct}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-orange-700 shadow-sm"
+                                >
+                                    Crear Producto
+                                </button>
                             </div>
                         </div>
                     </div>

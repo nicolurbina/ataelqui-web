@@ -6,6 +6,8 @@ export interface Product {
   category: string;
   price: number;
   cost: number;
+  brand?: string;
+  unit?: string;
   description: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -79,4 +81,17 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+// Provider Types
+export interface Provider {
+  id?: string;
+  name: string;
+  rut: string;
+  email: string;
+  phone: string;
+  address?: string;
+  status: 'Activo' | 'Inactivo';
+  createdAt?: Date;
+  updatedAt?: Date;
 }
