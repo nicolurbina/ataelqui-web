@@ -23,9 +23,14 @@ export interface ApiResponse<T> {
 
 class ApiClient {
   private baseUrl: string;
+  private token: string | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
+  }
+
+  setToken(token: string | null) {
+    this.token = token;
   }
 
   private async request<T>(
@@ -34,10 +39,14 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
-      const headers = {
+      const headers: any = {
         'Content-Type': 'application/json',
         ...options.headers,
       };
+
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
 
       const response = await fetch(url, {
         ...options,
@@ -249,6 +258,13 @@ class ApiClient {
     return this.request(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  async updateUserPassword(id: string, password: string) {
+    return this.request(`/users/${id}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
     });
   }
 

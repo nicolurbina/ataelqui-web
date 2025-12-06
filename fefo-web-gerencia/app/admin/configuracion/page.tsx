@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiClient } from '@/utils/api';
 import { createNotification } from '@/utils/notifications';
+import { AuthContext } from '@/contexts/AuthContext';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('users');
@@ -13,11 +14,17 @@ export default function SettingsPage() {
     const [newException, setNewException] = useState({ productId: '', productName: '', days: '', warningDays: '' });
     const [products, setProducts] = useState<any[]>([]);
 
+    // Auth Context
+    const { user: authUser } = React.useContext(AuthContext) || {};
+
     // User State (Existing Mock/Local)
     const [users, setUsers] = useState<any[]>([]);
-    const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Bodeguero' });
+    const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Bodeguero', password: '' });
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [passwordData, setPasswordData] = useState({ userId: '', newPassword: '' });
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
     // Providers State (New API-based)
     const [providers, setProviders] = useState<any[]>([]);
@@ -59,15 +66,28 @@ export default function SettingsPage() {
 
     // Fetch Data based on tab
     useEffect(() => {
-        if (activeTab === 'users') {
-            fetchUsers();
-        } else if (activeTab === 'providers') {
-            fetchProviders();
-        } else if (activeTab === 'params' || activeTab === 'products') {
-            fetchConfig();
-            fetchProducts();
+        if (authUser) {
+            authUser.getIdToken().then((token) => {
+                apiClient.setToken(token);
+
+                // Fetch current user role
+                apiClient.getUser(authUser.uid).then((response) => {
+                    if (response.success && response.data) {
+                        setCurrentUserRole((response.data as any).role);
+                    }
+                });
+
+                if (activeTab === 'users') {
+                    fetchUsers();
+                } else if (activeTab === 'providers') {
+                    fetchProviders();
+                } else if (activeTab === 'params' || activeTab === 'products') {
+                    fetchConfig();
+                    fetchProducts();
+                }
+            });
         }
-    }, [activeTab]);
+    }, [activeTab, authUser]);
 
     const fetchProviders = async () => {
         try {
@@ -88,6 +108,11 @@ export default function SettingsPage() {
             const response = await apiClient.getUsers();
             if (response.success) {
                 setUsers(response.data as any[]);
+            } else {
+                console.error('Error fetching users:', response.error);
+                if (response.error?.includes('Unauthorized') || response.error?.includes('403')) {
+                    alert('No tienes permisos para ver los usuarios. Asegúrate de ser Administrador.');
+                }
             }
         } catch (error) {
             console.error('Error fetching users:', error);
@@ -378,7 +403,7 @@ export default function SettingsPage() {
 
             if (response.success) {
                 fetchUsers();
-                setNewUser({ name: '', email: '', role: 'Bodeguero' });
+                setNewUser({ name: '', email: '', role: 'Bodeguero', password: '' });
                 alert('Usuario creado exitosamente');
             } else {
                 alert('Error al crear usuario: ' + response.error);
@@ -424,6 +449,32 @@ export default function SettingsPage() {
         } catch (error) {
             console.error('Error updating user:', error);
             alert('Error al actualizar usuario');
+        }
+    };
+
+    const openPasswordModal = (userId: string) => {
+        setPasswordData({ userId, newPassword: '' });
+        setIsPasswordModalOpen(true);
+    };
+
+    const handleChangePassword = async () => {
+        if (passwordData.newPassword.length < 6) {
+            alert('La contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+
+        try {
+            const response = await apiClient.updateUserPassword(passwordData.userId, passwordData.newPassword);
+            if (response.success) {
+                setIsPasswordModalOpen(false);
+                setPasswordData({ userId: '', newPassword: '' });
+                alert('Contraseña actualizada exitosamente');
+            } else {
+                alert('Error al actualizar contraseña: ' + response.error);
+            }
+        } catch (error) {
+            console.error('Error updating password:', error);
+            alert('Error al actualizar contraseña');
         }
     };
 
@@ -702,51 +753,64 @@ export default function SettingsPage() {
             {activeTab === 'users' ? (
                 <div className="space-y-6">
                     {/* Create User Section */}
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h2 className="text-lg font-bold text-gray-900 mb-4">Crear Nuevo Usuario</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre Completo</label>
-                                <input
-                                    type="text"
-                                    value={newUser.name}
-                                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                                    placeholder="Ej: Ana Silva"
-                                />
-                            </div>
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Corporativo</label>
-                                <input
-                                    type="email"
-                                    value={newUser.email}
-                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                                    placeholder="ana@ataelqui.cl"
-                                />
-                            </div>
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rol</label>
-                                <select
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                >
-                                    <option>Bodeguero</option>
-                                    <option>Supervisor</option>
-                                    <option>Administrador</option>
-                                </select>
-                            </div>
-                            <div className="md:col-span-1">
-                                <button
-                                    onClick={handleCreateUser}
-                                    className="w-full py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
-                                >
-                                    + Crear Usuario
-                                </button>
+                    {/* Create User Section - Only for Admins */}
+                    {currentUserRole === 'Administrador' && (
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                            <h2 className="text-lg font-bold text-gray-900 mb-4">Crear Nuevo Usuario</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre Completo</label>
+                                    <input
+                                        type="text"
+                                        value={newUser.name}
+                                        onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        placeholder="Ej: Ana Silva"
+                                    />
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Corporativo</label>
+                                    <input
+                                        type="email"
+                                        value={newUser.email}
+                                        onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        placeholder="ana@ataelqui.cl"
+                                    />
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rol</label>
+                                    <select
+                                        value={newUser.role}
+                                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                    >
+                                        <option>Bodeguero</option>
+                                        <option>Supervisor</option>
+                                        <option>Administrador</option>
+                                    </select>
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contraseña</label>
+                                    <input
+                                        type="password"
+                                        value={newUser.password}
+                                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        placeholder="******"
+                                    />
+                                </div>
+                                <div className="md:col-span-1">
+                                    <button
+                                        onClick={handleCreateUser}
+                                        className="w-full py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
+                                    >
+                                        + Crear Usuario
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Users Table */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -757,49 +821,99 @@ export default function SettingsPage() {
                                     <th className="px-6 py-4">Email</th>
                                     <th className="px-6 py-4">Rol</th>
                                     <th className="px-6 py-4 text-center">Estado</th>
-                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                    {currentUserRole === 'Administrador' && (
+                                        <th className="px-6 py-4 text-right">Acciones</th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {users.map((user) => (
                                     <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                            {user.name || <span className="text-gray-400 italic">Sin Nombre</span>}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                            {user.email || <span className="text-gray-400 italic">Sin Email</span>}
+                                        </td>
                                         <td className="px-6 py-4 text-sm text-gray-700">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                {user.role}
+                                                {user.role || 'Sin Rol'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${user.status === 'Activo' ? 'text-green-700 bg-green-100' : 'text-gray-600 bg-gray-100'}`}>
-                                                {user.status}
+                                                {user.status || 'Desconocido'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right space-x-2">
-                                            <button
-                                                onClick={() => openEditModal(user)}
-                                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                                title="Editar"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user.id)}
-                                                className="text-red-400 hover:text-red-600 transition-colors"
-                                                title="Eliminar"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </td>
+                                        {currentUserRole === 'Administrador' && (
+                                            <td className="px-6 py-4 text-right space-x-2">
+                                                <button
+                                                    onClick={() => openEditModal(user)}
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => openPasswordModal(user.id)}
+                                                    className="text-yellow-600 hover:text-yellow-800 transition-colors"
+                                                    title="Cambiar Contraseña"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(user.id)}
+                                                    className="text-red-400 hover:text-red-600 transition-colors"
+                                                    title="Eliminar"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Password Modal */}
+                    {isPasswordModalOpen && (
+                        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">
+                            <div className="bg-white p-6 rounded-xl shadow-2xl w-96 transform transition-all scale-100">
+                                <h3 className="text-lg font-bold mb-4 text-gray-900">Cambiar Contraseña</h3>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nueva Contraseña</label>
+                                    <input
+                                        type="password"
+                                        value={passwordData.newPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                                        placeholder="Mínimo 6 caracteres"
+                                    />
+                                </div>
+                                <div className="flex justify-end space-x-2">
+                                    <button
+                                        onClick={() => setIsPasswordModalOpen(false)}
+                                        className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleChangePassword}
+                                        className="px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-orange-700 shadow-md hover:shadow-lg transition-all"
+                                    >
+                                        Guardar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : activeTab === 'providers' ? (
                 <div className="space-y-6">
