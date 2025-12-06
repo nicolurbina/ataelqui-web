@@ -314,6 +314,55 @@ class ApiClient {
       return { success: false, error: error.message };
     }
   }
+
+  // Tasks (Firestore Direct)
+  async getTasksDirect() {
+    try {
+      const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const tasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt,
+        dueDate: doc.data().dueDate?.toDate?.()?.toISOString() || doc.data().dueDate,
+        updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || doc.data().updatedAt
+      }));
+      return { success: true, data: tasks };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Debug: Check for inventory_counts collection
+  async getDebugInventoryCounts() {
+    try {
+      const q = query(collection(db, 'inventory_counts'), limit(5));
+      const snapshot = await getDocs(q);
+      const counts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      return { success: true, data: counts };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Real Counts from 'counts' collection
+  async getCounts() {
+    try {
+      const q = query(collection(db, 'counts'), orderBy('date', 'desc'));
+      const snapshot = await getDocs(q);
+      const counts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+      }));
+      return { success: true, data: counts };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const apiClient = new ApiClient();

@@ -17,27 +17,23 @@ export default function HistoryPage() {
 
     const fetchCounts = async () => {
         try {
-            // Fetch tasks that are related to counting
-            // Assuming 'counting' or 'Conteo' type. 
-            // Since we don't have a strict type enum yet, we'll fetch all and filter or use query param if supported.
-            // Dashboard used 'counting'.
-            const response = await apiClient.getTasks();
+            setLoading(true);
+            // Fetch from the correct 'counts' collection
+            const response = await apiClient.getCounts();
+
             if (response.success && response.data) {
-                const allTasks = response.data as any[];
-                // Filter for counting tasks
-                const countingTasks = allTasks.filter(t =>
-                    t.type === 'counting' ||
-                    t.type === 'Conteo' ||
-                    t.type === 'Conteo Cíclico'
-                );
+                const countsData = response.data as any[];
 
                 // Map to view model
-                const mappedCounts = countingTasks.map(t => ({
-                    id: t.id,
-                    date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
-                    user: t.assignedTo || 'Sin asignar',
-                    location: t.description || 'General', // Using description as location placeholder if not separate field
-                    status: t.status === 'completed' ? 'Cerrado' : 'Pendiente'
+                const mappedCounts = countsData.map(c => ({
+                    id: c.countId || c.id, // Use countId (CNT-XXXX) if available, else doc id
+                    date: c.date ? new Date(c.date).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A',
+                    user: c.worker || c.origin || 'Móvil', // Prioritize worker name
+                    location: c.aisle || 'General',
+                    origin: c.origin || 'Móvil',
+                    expected: c.expected ?? 0,
+                    counted: c.counted ?? 0,
+                    status: c.status || 'Pendiente'
                 }));
 
                 setCounts(mappedCounts);
@@ -55,10 +51,12 @@ export default function HistoryPage() {
         setTimeout(() => setShowToast(false), 3000);
     };
 
-    const getStatusBadge = (status: string) => {
-        return status === 'Pendiente'
-            ? <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 rounded-full">Pendiente revisión</span>
-            : <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Cerrado</span>;
+    const getStatusBadge = (expected: number, counted: number) => {
+        if (expected === counted) {
+            return <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Correcto</span>;
+        } else {
+            return <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Discrepancia</span>;
+        }
     };
 
     const filteredCounts = counts.filter(count => {
@@ -66,6 +64,12 @@ export default function HistoryPage() {
             (count.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (count.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (count.location || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+        // Status filter might need adjustment if we are changing what 'status' means visually, 
+        // but for now let's keep the filter logic on the original 'status' field if the user still wants to filter by 'Pendiente/Cerrado'
+        // OR we can remove the filter if it doesn't make sense anymore. 
+        // The user didn't ask to remove the filter, but the column now shows Discrepancy/Correct.
+        // Let's keep the filter working on the backend status for now, as that's likely what 'Pendiente/Cerrado' refers to in the dropdown.
 
         const matchesStatus = filterStatus === 'Todos los Estados' ||
             (filterStatus === 'Pendiente revisión' && count.status === 'Pendiente') ||
@@ -127,9 +131,11 @@ export default function HistoryPage() {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                             <th className="px-6 py-4">ID Conteo</th>
-                            <th className="px-6 py-4">Fecha Ejecución</th>
+                            <th className="px-6 py-4">Fecha</th>
                             <th className="px-6 py-4">Bodeguero</th>
-                            <th className="px-6 py-4">Ubicación</th>
+                            <th className="px-6 py-4">Bodega</th>
+                            <th className="px-6 py-4 text-center">Esperado</th>
+                            <th className="px-6 py-4 text-center">Contado</th>
                             <th className="px-6 py-4 text-center">Estado</th>
                             <th className="px-6 py-4 text-right">Acciones</th>
                         </tr>
@@ -137,11 +143,11 @@ export default function HistoryPage() {
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr>
-                                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">Cargando historial...</td>
+                                <td colSpan={8} className="px-6 py-4 text-center text-gray-500">Cargando historial...</td>
                             </tr>
                         ) : filteredCounts.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No se encontraron conteos.</td>
+                                <td colSpan={8} className="px-6 py-4 text-center text-gray-500">No se encontraron conteos.</td>
                             </tr>
                         ) : (
                             filteredCounts.map((count) => (
@@ -150,8 +156,10 @@ export default function HistoryPage() {
                                     <td className="px-6 py-4 text-sm text-gray-500">{count.date}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700 font-medium">{count.user}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{count.location}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-900 text-center font-mono">{count.expected}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-900 text-center font-mono font-bold">{count.counted}</td>
                                     <td className="px-6 py-4 text-center">
-                                        {getStatusBadge(count.status)}
+                                        {getStatusBadge(count.expected, count.counted)}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button
