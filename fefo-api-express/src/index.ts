@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initializeFirebase } from './config/firebase.js';
+import { initializeFirebase } from './config/firebase';
 import productRoutes from './routes/products.js';
 import inventoryRoutes from './routes/inventory.js';
 import returnsRoutes from './routes/returns.js';
@@ -24,7 +24,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Initialize Firebase
-initializeFirebase();
+try {
+    initializeFirebase();
+} catch (error) {
+    console.error('Failed to initialize Firebase:', error);
+}
 
 // Routes
 app.use('/api/products', productRoutes);
