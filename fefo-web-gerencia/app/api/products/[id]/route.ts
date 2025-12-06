@@ -8,7 +8,7 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const docRef = doc(db, 'productos', id);
+        const docRef = doc(db, 'products', id);
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
@@ -38,7 +38,7 @@ export async function PUT(
     try {
         const { id } = await params;
         const data = await request.json();
-        const docRef = doc(db, 'productos', id);
+        const docRef = doc(db, 'products', id);
 
         await updateDoc(docRef, {
             ...data,
@@ -113,7 +113,7 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
-        const docRef = doc(db, 'productos', id);
+        const docRef = doc(db, 'products', id);
 
         await deleteDoc(docRef);
 

@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, query, orderBy } from 'firebase/firestore'
 export async function GET() {
     try {
         // Changed from 'products' to 'productos' to match mobile app
-        const productsRef = collection(db, 'productos');
+        const productsRef = collection(db, 'products');
         // You might want to add ordering here
         const q = query(productsRef);
         const snapshot = await getDocs(q);
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         // Basic validation could go here
 
         // Changed from 'products' to 'productos' to match mobile app
-        const docRef = await addDoc(collection(db, 'productos'), {
+        const docRef = await addDoc(collection(db, 'products'), {
             ...data,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
