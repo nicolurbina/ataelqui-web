@@ -27,8 +27,9 @@ app.use(express.urlencoded({ extended: true }));
 try {
     initializeFirebase();
     // Start listeners
-    import('./services/notificationService.js').then(({ startDiscrepancyListener }) => {
+    import('./services/notificationService.js').then(({ startDiscrepancyListener, startWasteListener }) => {
         startDiscrepancyListener();
+        startWasteListener();
     }).catch(err => console.error('Failed to start listeners:', err));
 } catch (error) {
     console.error('Failed to initialize Firebase:', error);

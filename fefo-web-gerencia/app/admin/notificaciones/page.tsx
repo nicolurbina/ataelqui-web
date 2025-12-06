@@ -68,6 +68,14 @@ export default function NotificationsPage() {
                         </svg>
                     </div>
                 );
+            case 'Merma':
+                return (
+                    <div className="p-2 bg-brown-100 rounded-lg text-brown-600" style={{ backgroundColor: '#efebe9', color: '#795548' }}>
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </div>
+                );
             default:
                 return (
                     <div className="p-2 bg-gray-100 rounded-lg text-gray-600">
@@ -190,6 +198,7 @@ export default function NotificationsPage() {
                     <option value="FEFO">FEFO</option>
                     <option value="Stock">Stock</option>
                     <option value="Discrepancy">Discrepancia</option>
+                    <option value="Merma">Merma</option>
                     <option value="System">Sistema</option>
                 </select>
                 <select
@@ -227,11 +236,13 @@ export default function NotificationsPage() {
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-1">
-                                                        <h3 className={`text-base font-bold ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.title}</h3>
+                                                        <div>
+                                                            <h3 className={`text-base font-bold ${notif.read ? 'text-gray-700' : 'text-primary'}`}>{notif.title}</h3>
+                                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                                {notif.type} • {notif.timestamp?.toLocaleString ? notif.timestamp.toLocaleString('es-CL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true }) : ''}
+                                                            </p>
+                                                        </div>
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-xs text-gray-400 whitespace-nowrap">
-                                                                {notif.timestamp?.toLocaleTimeString ? notif.timestamp.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                            </span>
                                                             <button
                                                                 onClick={(e) => handleDelete(notif.id, e)}
                                                                 className="text-gray-300 hover:text-red-500 transition-colors p-1"
@@ -243,7 +254,12 @@ export default function NotificationsPage() {
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <p className="text-sm text-gray-600 leading-relaxed mb-3">{notif.message}</p>
+                                                    <p className="text-sm text-gray-600 leading-relaxed mb-3 mt-2">{notif.message}</p>
+                                                    {notif.details && (
+                                                        <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 mb-2 whitespace-pre-line">
+                                                            {notif.details}
+                                                        </p>
+                                                    )}
                                                     <span className="inline-flex items-center text-xs font-bold text-primary hover:text-orange-700 transition-colors">
                                                         Ver detalle
                                                         <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

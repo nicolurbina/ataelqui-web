@@ -49,3 +49,49 @@ export const startDiscrepancyListener = () => {
         console.error('❌ Error in Discrepancy Listener:', error);
     });
 };
+
+export const startWasteListener = () => {
+    const db = getFirebaseDB();
+
+    console.log('👂 Starting Waste Listener...');
+
+    db.collection('waste').onSnapshot((snapshot: admin.firestore.QuerySnapshot) => {
+        snapshot.docChanges().forEach(async (change: admin.firestore.DocumentChange) => {
+            if (change.type === 'added') {
+                const waste = change.doc.data();
+                const wasteId = change.doc.id;
+
+                // Check if we haven't sent a notification yet
+                if (!waste.notificationSent) {
+                    console.log(`🗑️ New waste detected ${wasteId}. Generating notification...`);
+
+                    try {
+                        // Create notification in general_alerts
+                        await db.collection('general_alerts').add({
+                            type: 'Merma',
+                            title: 'Merma Registrada',
+                            desc: `Producto: ${waste.productName || 'Desconocido'}. Cantidad: ${waste.quantity}. Causa: ${waste.cause}.`,
+                            date: FieldValue.serverTimestamp(),
+                            read: false,
+                            icon: 'trash-can',
+                            color: '#795548',
+                            isSystem: true,
+                            relatedWasteId: wasteId
+                        });
+
+                        // Mark waste as processed
+                        await db.collection('waste').doc(wasteId).update({
+                            notificationSent: true
+                        });
+
+                        console.log(`✅ Notification created for waste ${wasteId}`);
+                    } catch (error: any) {
+                        console.error(`❌ Error creating notification for waste ${wasteId}:`, error);
+                    }
+                }
+            }
+        });
+    }, (error: any) => {
+        console.error('❌ Error in Waste Listener:', error);
+    });
+};
