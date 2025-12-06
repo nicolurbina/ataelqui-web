@@ -351,20 +351,44 @@ export default function SettingsPage() {
     };
 
     // User Handlers
-    const handleCreateUser = () => {
-        if (!newUser.name || !newUser.email) return;
-        const user = {
-            id: Date.now().toString(),
-            ...newUser,
-            status: 'Activo'
-        };
-        setUsers([...users, user]);
-        setNewUser({ name: '', email: '', role: 'Bodeguero' });
+    const handleCreateUser = async () => {
+        if (!newUser.name || !newUser.email) {
+            alert('Nombre y Email son obligatorios');
+            return;
+        }
+
+        try {
+            const response = await apiClient.createUser({
+                ...newUser,
+                status: 'Activo'
+            });
+
+            if (response.success) {
+                fetchUsers();
+                setNewUser({ name: '', email: '', role: 'Bodeguero' });
+                alert('Usuario creado exitosamente');
+            } else {
+                alert('Error al crear usuario: ' + response.error);
+            }
+        } catch (error) {
+            console.error('Error creating user:', error);
+            alert('Error al crear usuario');
+        }
     };
 
-    const handleDeleteUser = (id: string) => {
-        if (confirm('¿Estás seguro de eliminar este usuario?')) {
-            setUsers(users.filter(u => u.id !== id));
+    const handleDeleteUser = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+
+        try {
+            const response = await apiClient.deleteUser(id);
+            if (response.success) {
+                fetchUsers();
+            } else {
+                alert('Error al eliminar usuario');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            alert('Error al eliminar usuario');
         }
     };
 
@@ -373,10 +397,21 @@ export default function SettingsPage() {
         setIsEditModalOpen(true);
     };
 
-    const handleUpdateUser = () => {
-        setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
-        setIsEditModalOpen(false);
-        setEditingUser(null);
+    const handleUpdateUser = async () => {
+        try {
+            const response = await apiClient.updateUser(editingUser.id, editingUser);
+            if (response.success) {
+                fetchUsers();
+                setIsEditModalOpen(false);
+                setEditingUser(null);
+                alert('Usuario actualizado exitosamente');
+            } else {
+                alert('Error al actualizar usuario');
+            }
+        } catch (error) {
+            console.error('Error updating user:', error);
+            alert('Error al actualizar usuario');
+        }
     };
 
     // Provider Handlers

@@ -137,12 +137,7 @@ const Sidebar = () => {
                         <p className="px-4 text-xs font-semibold text-white/60 uppercase tracking-wider">Administración</p>
                     </div>
 
-                    <Link href="/admin/administracion/usuarios" className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive('/admin/administracion/usuarios') ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                        <span className="font-medium">Usuarios</span>
-                    </Link>
+
 
                     {/* Configuración */}
                     <Link href="/admin/configuracion" className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all group ${isActive('/admin/configuracion') ? 'bg-white/20 text-white shadow-sm' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}>
