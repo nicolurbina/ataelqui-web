@@ -9,6 +9,7 @@ interface ProductData {
     id: string;
     sku: string;
     name: string;
+    brand?: string;
     category: string;
     provider: string;
     warehouse: string;
@@ -24,6 +25,7 @@ export default function StockPage() {
     const [newProduct, setNewProduct] = useState({
         sku: '',
         name: '',
+        brand: '',
         category: 'Insumos',
         provider: '',
         warehouse: 'Bodega 1',
@@ -86,6 +88,7 @@ export default function StockPage() {
                         id: product.id,
                         sku: product.sku,
                         name: product.name,
+                        brand: (product as any).brand,
                         category: product.category,
                         provider: product.provider,
                         warehouse: 'Múltiple', // Placeholder
@@ -166,6 +169,7 @@ export default function StockPage() {
             setNewProduct({
                 sku: product.sku,
                 name: product.name,
+                brand: product.brand || '',
                 category: product.category,
                 provider: product.provider,
                 warehouse: product.warehouse || 'Bodega 1',
@@ -258,6 +262,7 @@ export default function StockPage() {
         setNewProduct({
             sku: '',
             name: '',
+            brand: '',
             category: 'Insumos',
             provider: '',
             warehouse: 'Bodega 1',
@@ -455,6 +460,7 @@ export default function StockPage() {
                             <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                                 <th className="px-6 py-4">SKU</th>
                                 <th className="px-6 py-4">Producto</th>
+                                <th className="px-6 py-4">Marca</th>
                                 <th className="px-6 py-4">Categoría</th>
                                 <th className="px-6 py-4">Proveedor</th>
                                 <th className="px-6 py-4">Bodega</th>
@@ -469,6 +475,7 @@ export default function StockPage() {
                                 <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${product.totalStock < product.minStock ? 'bg-red-50/30' : ''}`}>
                                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{product.sku}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700 font-medium">{product.name}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">{product.brand || '-'}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{product.category}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{product.provider}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{product.warehouse}</td>
@@ -578,6 +585,18 @@ export default function StockPage() {
                                     onChange={handleInputChange}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
                                     placeholder="Ej: Harina Selecta 25kg"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
+                                <input
+                                    type="text"
+                                    name="brand"
+                                    value={newProduct.brand}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    placeholder="Ej: Selecta, Colun, etc."
                                 />
                             </div>
 

@@ -11,7 +11,6 @@ const Sidebar = () => {
     const pathname = usePathname();
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
         inventario: true,
-        tareas: false,
         devoluciones: false,
     });
     const [notificationCount, setNotificationCount] = useState(0);
