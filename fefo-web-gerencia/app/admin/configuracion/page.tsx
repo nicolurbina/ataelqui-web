@@ -39,8 +39,7 @@ export default function SettingsPage() {
     const [newLot, setNewLot] = useState({
         batch: '',
         quantity: '' as string | number,
-        expiryDate: '',
-        unitCost: '' as string | number
+        expiryDate: ''
     });
 
     const [editingLotId, setEditingLotId] = useState<string | null>(null);
@@ -125,9 +124,13 @@ export default function SettingsPage() {
             const response = await apiClient.getInventoryByProduct(productId);
             if (response.success) {
                 setProductLots(response.data as any[]);
+            } else {
+                console.error('Error fetching lots:', response.error);
+                alert('Error al cargar lotes: ' + response.error);
             }
         } catch (error) {
             console.error('Error fetching lots:', error);
+            alert('Error al cargar lotes. Verifique su conexión o permisos.');
         }
     };
 
@@ -218,7 +221,6 @@ export default function SettingsPage() {
                 batch: newLot.batch,
                 quantity: Number(newLot.quantity),
                 expiryDate: newLot.expiryDate,
-                unitCost: Number(newLot.unitCost),
                 status: 'Disponible'
             };
 
@@ -269,7 +271,9 @@ export default function SettingsPage() {
                 }
 
                 fetchProductLots(selectedProduct.id);
-                setNewLot({ batch: '', quantity: '', expiryDate: '', unitCost: '' });
+                fetchProductLots(selectedProduct.id);
+                setNewLot({ batch: '', quantity: '', expiryDate: '' });
+                setEditingLotId(null);
                 setEditingLotId(null);
             } else {
                 alert('Error al guardar lote');
@@ -284,8 +288,7 @@ export default function SettingsPage() {
         setNewLot({
             batch: lot.batch,
             quantity: lot.quantity,
-            expiryDate: lot.expiryDate,
-            unitCost: lot.unitCost
+            expiryDate: lot.expiryDate
         });
         setEditingLotId(lot.id);
     };
@@ -307,7 +310,7 @@ export default function SettingsPage() {
     };
 
     const handleCancelEdit = () => {
-        setNewLot({ batch: '', quantity: '', expiryDate: '', unitCost: '' });
+        setNewLot({ batch: '', quantity: '', expiryDate: '' });
         setEditingLotId(null);
     };
 
@@ -348,6 +351,16 @@ export default function SettingsPage() {
         if (clean.length > 7) formatted += ' ' + clean.slice(7); // XXXX
 
         return formatted;
+    };
+
+    const formatDate = (date: any) => {
+        if (!date) return '-';
+        // Handle Firestore Timestamp
+        if (typeof date === 'object' && 'seconds' in date) {
+            return new Date(date.seconds * 1000).toLocaleDateString('es-CL');
+        }
+        // Handle string or Date object
+        return new Date(date).toLocaleDateString('es-CL');
     };
 
     // User Handlers
@@ -1327,7 +1340,7 @@ export default function SettingsPage() {
                             {/* Add New Lot */}
                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                                 <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">{editingLotId ? 'Editar Lote' : 'Agregar Nuevo Lote'}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                                     <div className="md:col-span-1">
                                         <label className="block text-xs font-bold text-gray-500 mb-1">N° Lote</label>
                                         <input
@@ -1356,15 +1369,7 @@ export default function SettingsPage() {
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                                         />
                                     </div>
-                                    <div className="md:col-span-1">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Costo Unit.</label>
-                                        <input
-                                            type="number"
-                                            value={newLot.unitCost}
-                                            onChange={(e) => setNewLot({ ...newLot, unitCost: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                        />
-                                    </div>
+
                                     <div className="md:col-span-1 flex gap-2">
                                         {editingLotId && (
                                             <button
@@ -1394,7 +1399,6 @@ export default function SettingsPage() {
                                                 <th className="px-4 py-3">Lote</th>
                                                 <th className="px-4 py-3">Vencimiento</th>
                                                 <th className="px-4 py-3 text-right">Cantidad</th>
-                                                <th className="px-4 py-3 text-right">Costo</th>
                                                 <th className="px-4 py-3 text-center">Estado</th>
                                                 <th className="px-4 py-3 text-right">Acciones</th>
                                             </tr>
@@ -1404,9 +1408,8 @@ export default function SettingsPage() {
                                                 productLots.map((lot) => (
                                                     <tr key={lot.id}>
                                                         <td className="px-4 py-3 font-medium text-gray-900">{lot.batch}</td>
-                                                        <td className="px-4 py-3 text-gray-600">{lot.expiryDate}</td>
+                                                        <td className="px-4 py-3 text-gray-600">{formatDate(lot.expiryDate)}</td>
                                                         <td className="px-4 py-3 text-right font-bold">{lot.quantity}</td>
-                                                        <td className="px-4 py-3 text-right text-gray-500">${lot.unitCost}</td>
                                                         <td className="px-4 py-3 text-center">
                                                             <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">
                                                                 {lot.status}
