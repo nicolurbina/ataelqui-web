@@ -14,16 +14,24 @@ export default function NotificationsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Real-time listener for notifications
-        const q = query(collection(db, 'notifications'), orderBy('timestamp', 'desc'));
+        // Real-time listener for notifications from 'general_alerts'
+        const q = query(collection(db, 'general_alerts'), orderBy('date', 'desc'));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const notifs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                // Convert Firestore Timestamp to JS Date
-                timestamp: doc.data().timestamp?.toDate() || new Date()
-            }));
+            const notifs = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Map fields from general_alerts to component state
+                    title: data.title,
+                    message: data.desc, // 'desc' in general_alerts maps to 'message'
+                    type: data.type || 'System',
+                    timestamp: data.date?.toDate ? data.date.toDate() : (data.date ? new Date(data.date) : new Date()),
+                    read: data.read || false, // Handle missing 'read' field
+                    details: data.details || (data.expected !== undefined ? `Esperado: ${data.expected}\nContado: ${data.counted}\nDiferencia: ${data.counted - data.expected}` : '')
+                };
+            });
             setNotifications(notifs);
             setLoading(false);
         }, (error) => {
@@ -76,7 +84,7 @@ export default function NotificationsPage() {
         const unreadNotifications = notifications.filter(n => !n.read);
 
         unreadNotifications.forEach(n => {
-            const ref = doc(db, 'notifications', n.id);
+            const ref = doc(db, 'general_alerts', n.id);
             batch.update(ref, { read: true });
         });
 
@@ -92,7 +100,7 @@ export default function NotificationsPage() {
         setIsModalOpen(true);
         if (!notification.read) {
             try {
-                const ref = doc(db, 'notifications', notification.id);
+                const ref = doc(db, 'general_alerts', notification.id);
                 await updateDoc(ref, { read: true });
             } catch (error) {
                 console.error("Error marking as read:", error);
@@ -104,7 +112,7 @@ export default function NotificationsPage() {
         e.stopPropagation();
         if (confirm('¿Estás seguro de eliminar esta notificación?')) {
             try {
-                await deleteDoc(doc(db, 'notifications', id));
+                await deleteDoc(doc(db, 'general_alerts', id));
             } catch (error) {
                 console.error("Error deleting notification:", error);
             }

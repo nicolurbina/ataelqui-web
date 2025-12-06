@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initializeFirebase } from './config/firebase';
+import { initializeFirebase } from './config/firebase.js';
 import productRoutes from './routes/products.js';
 import inventoryRoutes from './routes/inventory.js';
 import returnsRoutes from './routes/returns.js';
@@ -26,6 +26,10 @@ app.use(express.urlencoded({ extended: true }));
 // Initialize Firebase
 try {
     initializeFirebase();
+    // Start listeners
+    import('./services/notificationService.js').then(({ startDiscrepancyListener }) => {
+        startDiscrepancyListener();
+    }).catch(err => console.error('Failed to start listeners:', err));
 } catch (error) {
     console.error('Failed to initialize Firebase:', error);
 }

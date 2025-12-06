@@ -119,6 +119,43 @@ class ApiClient {
     return this.request('/mermas');
   }
 
+  // Waste (Firestore Direct)
+  async getWaste() {
+    try {
+      const q = query(collection(db, 'waste'), orderBy('date', 'desc'));
+      const snapshot = await getDocs(q);
+      const waste = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+      }));
+      return { success: true, data: waste };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createWaste(data: any) {
+    try {
+      const docRef = await addDoc(collection(db, 'waste'), {
+        ...data,
+        date: new Date() // Store as Firestore Timestamp or Date
+      });
+      return { success: true, data: { id: docRef.id, ...data } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteWaste(id: string) {
+    try {
+      await deleteDoc(doc(db, 'waste', id));
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Returns
   async getReturns(filters?: any) {
     const params = new URLSearchParams(filters).toString();

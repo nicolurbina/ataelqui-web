@@ -38,7 +38,7 @@ export default function MermasPage() {
             setLoading(true);
             const [productsRes, mermasRes] = await Promise.all([
                 apiClient.getProducts(),
-                apiClient.getMermas()
+                apiClient.getWaste() // Use new getWaste method
             ]);
 
             if (productsRes.success && productsRes.data) {
@@ -50,16 +50,16 @@ export default function MermasPage() {
 
                 const mappedWriteOffs = mermasData.map(item => {
                     // Try to find product name if not in item
-                    const product = (productsRes.data as any[]).find(p => p.id === item.productId);
+                    // item.productName is from waste collection
                     return {
                         id: item.id,
-                        date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A',
-                        product: item.productName || product?.name || 'Producto Desconocido',
-                        batch: item.batch || item.batchNumber || 'N/A',
+                        date: item.date ? new Date(item.date).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A',
+                        product: item.productName || 'Producto Desconocido',
+                        batch: item.lot || 'N/A', // 'lot' in waste collection
                         quantity: item.quantity,
-                        cause: item.cause || (item.status === 'expired' ? 'Vencido' : 'Daño'),
-                        unitCost: item.unitCost || item.cost || product?.cost || 0,
-                        totalLoss: ((item.unitCost || item.cost || product?.cost || 0) * item.quantity)
+                        cause: item.cause || 'Daño',
+                        unitCost: item.cost || 0, // 'cost' in waste collection
+                        totalLoss: ((item.cost || 0) * item.quantity)
                     };
                 });
                 setWriteOffs(mappedWriteOffs);
@@ -102,22 +102,20 @@ export default function MermasPage() {
         if (!newMerma.productId || !newMerma.batch || newMerma.quantity <= 0) return;
 
         try {
-            // Create a new inventory item with status 'damaged' or 'expired' to represent the write-off
-            // OR update existing inventory.
-            // Since we are "Registering New Merma", it implies adding a record.
-            // If we are writing off existing stock, we should probably select from existing inventory.
-            // For this simple version, we'll create a new inventory item marked as damaged.
+            // Create a new waste item in 'waste' collection
             const payload = {
                 productId: newMerma.productId,
+                productName: newMerma.productName,
                 quantity: newMerma.quantity,
-                location: 'Merma', // Placeholder location
-                expiryDate: new Date().toISOString(), // Placeholder
-                batchNumber: newMerma.batch,
-                status: newMerma.cause === 'Vencido' ? 'expired' : 'damaged',
-                cost: newMerma.unitCost
+                lot: newMerma.batch, // 'lot' in waste collection
+                cause: newMerma.cause,
+                cost: newMerma.unitCost, // 'cost' in waste collection
+                sku: filteredProducts.find(p => p.id === newMerma.productId)?.sku || '',
+                user: 'Gerencia', // Placeholder user
+                date: new Date()
             };
 
-            const response = await apiClient.createInventoryItem(payload);
+            const response = await apiClient.createWaste(payload);
             if (response.success) {
                 fetchData(); // Refresh list
                 setIsModalOpen(false);
@@ -135,7 +133,7 @@ export default function MermasPage() {
         if (!confirm('¿Estás seguro de que deseas eliminar este registro de merma?')) return;
 
         try {
-            const response = await apiClient.deleteInventoryItem(id);
+            const response = await apiClient.deleteWaste(id);
             if (response.success) {
                 fetchData(); // Refresh list
             } else {
@@ -434,7 +432,7 @@ export default function MermasPage() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Costo Unitario</label>
                                     <input
                                         type="number"
-                                        value={newMerma.unitCost === 0 ? '' : newMerma.unitCost}
+                                        value={newMerma.unitCost || ''}
                                         onChange={(e) => setNewMerma({ ...newMerma, unitCost: parseInt(e.target.value) || 0 })}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
                                         placeholder="0"
