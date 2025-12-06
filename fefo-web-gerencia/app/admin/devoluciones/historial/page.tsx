@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import DatePicker from '@/components/ui/DatePicker';
-import { apiClient } from '@/utils/api';
+import { db } from '@/config/firebase';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 
 export default function ReturnsHistoryPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -23,23 +24,37 @@ export default function ReturnsHistoryPage() {
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            const response = await apiClient.getReturns();
-            if (response.success && response.data) {
-                const mappedHistory = (response.data as any[]).map(item => ({
-                    id: item.id,
-                    date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
-                    rawDate: item.createdAt ? new Date(item.createdAt) : null,
-                    // Assuming API might not return origin/client explicitly yet, using placeholders or mapping
-                    origin: item.origin || 'Móvil (Ruta)',
-                    client: item.requestedBy || 'Cliente Desconocido',
-                    items: item.quantity || 1,
-                    status: item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobado' : item.status === 'rejected' ? 'Rechazado' : item.status,
-                    total: '$0', // Placeholder as cost isn't in simple return object yet
-                    reason: item.reason || 'Sin motivo',
-                    evidenceUrl: item.evidenceUrl
-                }));
-                setHistory(mappedHistory);
-            }
+            const q = query(collection(db, 'returns'), orderBy('date', 'desc'));
+            const querySnapshot = await getDocs(q);
+
+            const mappedHistory = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+
+                // Handle date parsing (Timestamp or string)
+                let dateObj: Date | null = null;
+                if (data.date?.toDate) {
+                    dateObj = data.date.toDate();
+                } else if (data.date) {
+                    dateObj = new Date(data.date);
+                } else if (data.createdAt?.toDate) {
+                    dateObj = data.createdAt.toDate();
+                } else if (data.createdAt) {
+                    dateObj = new Date(data.createdAt);
+                }
+
+                return {
+                    id: doc.id,
+                    date: dateObj ? dateObj.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                    rawDate: dateObj,
+                    origin: data.docType === 'Factura' ? 'Móvil (Ruta)' : 'Web (Manual)',
+                    client: data.client || 'Cliente Desconocido',
+                    items: data.items ? data.items.length : 0,
+                    status: 'Aprobado', // Defaulting to Approved as per screenshot/requirement or logic
+                    reason: data.reason || 'Sin motivo',
+                    evidenceUrl: data.evidence // Base64 string
+                };
+            });
+            setHistory(mappedHistory);
         } catch (error) {
             console.error('Error fetching history:', error);
         } finally {
@@ -145,7 +160,6 @@ export default function ReturnsHistoryPage() {
                             <th className="px-6 py-4">Origen</th>
                             <th className="px-6 py-4">Cliente / Ruta</th>
                             <th className="px-6 py-4 text-center">Items</th>
-                            <th className="px-6 py-4 text-right">Monto Estimado</th>
                             <th className="px-6 py-4 text-center">Estado</th>
                             <th className="px-6 py-4 text-center">Evidencia</th>
                         </tr>
@@ -153,7 +167,7 @@ export default function ReturnsHistoryPage() {
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr>
-                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">Cargando historial...</td>
+                                <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">Cargando historial...</td>
                             </tr>
                         ) : filteredHistory.length > 0 ? (
                             filteredHistory.map((item) => (
@@ -163,7 +177,6 @@ export default function ReturnsHistoryPage() {
                                     <td className="px-6 py-4 text-sm">{getOriginBadge(item.origin)}</td>
                                     <td className="px-6 py-4 text-sm text-gray-700 font-medium">{item.client}</td>
                                     <td className="px-6 py-4 text-center text-sm text-gray-600">{item.items}</td>
-                                    <td className="px-6 py-4 text-right text-sm font-bold text-gray-900">{item.total}</td>
                                     <td className="px-6 py-4 text-center">
                                         {getStatusBadge(item.status)}
                                     </td>

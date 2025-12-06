@@ -14,8 +14,8 @@ export default function NotificationsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Real-time listener for notifications from 'general_alerts'
-        const q = query(collection(db, 'general_alerts'), orderBy('date', 'desc'));
+        // Real-time listener for notifications from 'notifications'
+        const q = query(collection(db, 'notifications'), orderBy('date', 'desc'));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => {
@@ -23,9 +23,9 @@ export default function NotificationsPage() {
                 return {
                     id: doc.id,
                     ...data,
-                    // Map fields from general_alerts to component state
+                    // Map fields from notifications to component state
                     title: data.title,
-                    message: data.desc, // 'desc' in general_alerts maps to 'message'
+                    message: data.desc, // 'desc' in notifications maps to 'message'
                     type: data.type || 'System',
                     timestamp: data.date?.toDate ? data.date.toDate() : (data.date ? new Date(data.date) : new Date()),
                     read: data.read || false, // Handle missing 'read' field
@@ -68,6 +68,14 @@ export default function NotificationsPage() {
                         </svg>
                     </div>
                 );
+            case 'Devolución':
+                return (
+                    <div className="p-2 bg-orange-100 rounded-lg text-orange-600" style={{ backgroundColor: '#fff3e0', color: '#ef6c00' }}>
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                    </div>
+                );
             case 'Merma':
                 return (
                     <div className="p-2 bg-brown-100 rounded-lg text-brown-600" style={{ backgroundColor: '#efebe9', color: '#795548' }}>
@@ -86,13 +94,12 @@ export default function NotificationsPage() {
                 );
         }
     };
-
     const handleMarkAllAsRead = async () => {
         const batch = writeBatch(db);
         const unreadNotifications = notifications.filter(n => !n.read);
 
         unreadNotifications.forEach(n => {
-            const ref = doc(db, 'general_alerts', n.id);
+            const ref = doc(db, 'notifications', n.id);
             batch.update(ref, { read: true });
         });
 
@@ -103,24 +110,11 @@ export default function NotificationsPage() {
         }
     };
 
-    const handleViewDetail = async (notification: any) => {
-        setSelectedNotification(notification);
-        setIsModalOpen(true);
-        if (!notification.read) {
-            try {
-                const ref = doc(db, 'general_alerts', notification.id);
-                await updateDoc(ref, { read: true });
-            } catch (error) {
-                console.error("Error marking as read:", error);
-            }
-        }
-    };
-
     const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (confirm('¿Estás seguro de eliminar esta notificación?')) {
             try {
-                await deleteDoc(doc(db, 'general_alerts', id));
+                await deleteDoc(doc(db, 'notifications', id));
             } catch (error) {
                 console.error("Error deleting notification:", error);
             }
@@ -165,6 +159,17 @@ export default function NotificationsPage() {
 
     const groupOrder = ['Hoy', 'Ayer', 'Esta Semana', 'Anterior'];
 
+    const handleViewDetail = (notification: any) => {
+        setSelectedNotification(notification);
+        setIsModalOpen(true);
+
+        // Mark as read if not already
+        if (!notification.read) {
+            const ref = doc(db, 'notifications', notification.id);
+            updateDoc(ref, { read: true }).catch(err => console.error("Error marking as read:", err));
+        }
+    };
+
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
             <div className="mb-6 flex justify-between items-center">
@@ -199,6 +204,7 @@ export default function NotificationsPage() {
                     <option value="Stock">Stock</option>
                     <option value="Discrepancy">Discrepancia</option>
                     <option value="Merma">Merma</option>
+                    <option value="Devolución">Devolución</option>
                     <option value="System">Sistema</option>
                 </select>
                 <select

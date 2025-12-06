@@ -8,6 +8,7 @@ import returnsRoutes from './routes/returns.js';
 import tasksRoutes from './routes/tasks.js';
 import usersRoutes from './routes/users.js';
 import providersRoutes from './routes/providers.js';
+import { startDiscrepancyListener, startWasteListener, startReturnListener } from './services/notificationService.js';
 
 dotenv.config();
 
@@ -27,10 +28,10 @@ app.use(express.urlencoded({ extended: true }));
 try {
     initializeFirebase();
     // Start listeners
-    import('./services/notificationService.js').then(({ startDiscrepancyListener, startWasteListener }) => {
-        startDiscrepancyListener();
-        startWasteListener();
-    }).catch(err => console.error('Failed to start listeners:', err));
+    console.log('🚀 Initializing listeners...');
+    startDiscrepancyListener();
+    startWasteListener();
+    startReturnListener();
 } catch (error) {
     console.error('Failed to initialize Firebase:', error);
 }
