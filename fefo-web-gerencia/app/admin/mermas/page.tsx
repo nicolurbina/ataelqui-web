@@ -36,35 +36,30 @@ export default function MermasPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [productsRes, inventoryRes] = await Promise.all([
+            const [productsRes, mermasRes] = await Promise.all([
                 apiClient.getProducts(),
-                apiClient.getInventory() // Ideally filter by status if API supports it, e.g. ?status=damaged
+                apiClient.getMermas()
             ]);
 
             if (productsRes.success && productsRes.data) {
                 setProductsDb(productsRes.data as any[]);
             }
 
-            if (inventoryRes.success && inventoryRes.data) {
-                const allInventory = inventoryRes.data as any[];
-                // Filter for items that are considered 'merma' (damaged, expired, etc.)
-                // Assuming 'damaged' status or maybe we need a specific 'write-off' record.
-                // For now, let's assume inventory items with status 'damaged' are mermas.
-                // AND/OR we might need a separate 'write-offs' endpoint if mermas are deleted from inventory.
-                // Given the current API, let's filter inventory for 'damaged'.
-                const damagedItems = allInventory.filter(item => item.status === 'damaged' || item.status === 'expired');
+            if (mermasRes.success && mermasRes.data) {
+                const mermasData = mermasRes.data as any[];
 
-                const mappedWriteOffs = damagedItems.map(item => {
+                const mappedWriteOffs = mermasData.map(item => {
+                    // Try to find product name if not in item
                     const product = (productsRes.data as any[]).find(p => p.id === item.productId);
                     return {
                         id: item.id,
-                        date: item.updatedAt ? new Date(item.updatedAt).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A',
-                        product: product?.name || 'Producto Desconocido',
-                        batch: item.batchNumber,
+                        date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A',
+                        product: item.productName || product?.name || 'Producto Desconocido',
+                        batch: item.batch || item.batchNumber || 'N/A',
                         quantity: item.quantity,
-                        cause: item.status === 'expired' ? 'Vencido' : 'Daño', // Map status to cause
-                        unitCost: item.cost || product?.cost || 0,
-                        totalLoss: (item.cost || product?.cost || 0) * item.quantity
+                        cause: item.cause || (item.status === 'expired' ? 'Vencido' : 'Daño'),
+                        unitCost: item.unitCost || item.cost || product?.cost || 0,
+                        totalLoss: ((item.unitCost || item.cost || product?.cost || 0) * item.quantity)
                     };
                 });
                 setWriteOffs(mappedWriteOffs);

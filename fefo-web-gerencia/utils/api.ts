@@ -114,6 +114,11 @@ class ApiClient {
     return this.request('/inventory/stats/fefo-alerts');
   }
 
+  // Mermas
+  async getMermas() {
+    return this.request('/mermas');
+  }
+
   // Returns
   async getReturns(filters?: any) {
     const params = new URLSearchParams(filters).toString();
