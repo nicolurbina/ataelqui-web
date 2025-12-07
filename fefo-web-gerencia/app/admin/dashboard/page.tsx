@@ -23,52 +23,51 @@ export default function DashboardPage() {
     useEffect(() => {
         async function fetchData() {
             try {
-                // Pedimos los productos, inventario (para alertas FEFO) y tareas a la API
-                const [productsRes, fefoRes, tasksRes] = await Promise.all([
+                // Pedimos los productos, inventario (para alertas FEFO), tareas y kardex a la API
+                const [productsRes, fefoRes, tasksRes, kardexRes] = await Promise.all([
                     apiClient.getProducts(),
                     apiClient.getFefoAlerts(),
-                    apiClient.getTasks({ status: 'pending' })
+                    apiClient.getTasks({ status: 'pending' }),
+                    apiClient.getKardex()
                 ]);
 
                 if (productsRes.success && productsRes.data) {
                     const productos = productsRes.data as any[];
 
                     // A. STOCK TOTAL
-                    const totalStock = productos.reduce((acc, item) => acc + (Number(item.stock) || Number(item.quantity) || 0), 0);
+                    const totalStock = productos.reduce((acc, item) => acc + (Number(item.stock) || Number(item.quantity) || Number(item.totalStock) || 0), 0);
 
                     // B. ALERTAS (Stock bajo < 10)
-                    const totalAlertas = productos.filter((p) => (Number(p.stock) || 0) <= (Number(p.minStock) || 10)).length;
+                    const totalAlertas = productos.filter((p) => (Number(p.stock) || Number(p.totalStock) || 0) <= (Number(p.minStock) || 10)).length;
 
                     // C. VALORIZADO TOTAL
                     const totalValor = productos.reduce((acc, item) => {
-                        const qty = Number(item.stock) || Number(item.quantity) || 0;
+                        const qty = Number(item.stock) || Number(item.quantity) || Number(item.totalStock) || 0;
                         const cost = Number(item.cost) || 0;
                         return acc + (qty * cost);
                     }, 0);
 
                     // D. TOP 5 PRODUCTOS
                     const sortedProducts = [...productos]
-                        .sort((a, b) => (b.stock || 0) - (a.stock || 0))
+                        .sort((a, b) => (Number(b.stock) || Number(b.totalStock) || 0) - (Number(a.stock) || Number(a.totalStock) || 0))
                         .slice(0, 5)
                         .map(p => ({
                             name: p.name,
-                            volume: Number(p.stock) || 0
+                            volume: Number(p.stock) || Number(p.totalStock) || 0
                         }));
 
                     // E. CATEGORÍAS (Para el gráfico de dona)
-                    // Agrupamos por categoría y sumamos valor
                     const catMap: Record<string, number> = {};
                     productos.forEach(p => {
                         const cat = p.category || 'Otros';
-                        const val = (Number(p.stock) || 0) * (Number(p.cost) || 0);
+                        const val = (Number(p.stock) || Number(p.totalStock) || 0) * (Number(p.cost) || 0);
                         catMap[cat] = (catMap[cat] || 0) + val;
                     });
 
-                    // Convertimos a array y ordenamos
                     const catArray = Object.entries(catMap)
                         .map(([name, value]) => ({ name, value }))
                         .sort((a, b) => b.value - a.value)
-                        .slice(0, 3); // Top 3 categorías
+                        .slice(0, 3);
 
                     // F. FEFO ALERTS
                     const fefoAlertsCount = fefoRes.success && fefoRes.data ? (fefoRes.data as any).alertsCount : 0;
@@ -78,11 +77,30 @@ export default function DashboardPage() {
                     const returnsPending = tasks.filter(t => t.type === 'devolution').length;
                     const countingPending = tasks.filter(t => t.type === 'counting').length;
 
+                    // H. ROTATION (Real Calculation)
+                    let calculatedRotation = '0.0x';
+                    if (kardexRes.success && kardexRes.data) {
+                        const kardex = kardexRes.data as any[];
+                        const thirtyDaysAgo = new Date();
+                        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+                        const totalOutputs = kardex
+                            .filter(k =>
+                                k.type === 'Salida' &&
+                                new Date(k.date) >= thirtyDaysAgo
+                            )
+                            .reduce((sum, k) => sum + (Number(k.quantity) || 0), 0);
+
+                        if (totalStock > 0) {
+                            calculatedRotation = (totalOutputs / totalStock).toFixed(1) + 'x';
+                        }
+                    }
+
                     setStats({
                         alerts: totalAlertas,
                         stock: totalStock,
                         valorizado: totalValor,
-                        rotation: '0.0x', // No data yet
+                        rotation: calculatedRotation,
                         fefoAlerts: fefoAlertsCount
                     });
                     setTopProducts(sortedProducts);

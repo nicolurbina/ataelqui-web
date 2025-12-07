@@ -37,6 +37,7 @@ export async function POST(request: Request) {
         // Changed from 'products' to 'productos' to match mobile app
         const docRef = await addDoc(collection(db, 'products'), {
             ...data,
+            stock: Number(data.totalStock) || 0, // Add this field for mobile app compatibility
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         });

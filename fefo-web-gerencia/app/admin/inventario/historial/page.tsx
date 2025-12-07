@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '@/utils/api';
+import * as XLSX from 'xlsx';
 
 export default function HistoryPage() {
     const [counts, setCounts] = useState<any[]>([]);
@@ -23,6 +24,7 @@ export default function HistoryPage() {
 
             if (response.success && response.data) {
                 const countsData = response.data as any[];
+                console.log('Raw counts data:', countsData);
 
                 // Map to view model
                 const mappedCounts = countsData.map(c => ({
@@ -33,9 +35,11 @@ export default function HistoryPage() {
                     origin: c.origin || 'Móvil',
                     expected: c.expected ?? 0,
                     counted: c.counted ?? 0,
-                    status: c.status || 'Pendiente'
+                    status: c.status || 'Pendiente',
+                    items: c.items || [] // Store items for export
                 }));
 
+                console.log('Mapped counts:', mappedCounts);
                 setCounts(mappedCounts);
             }
         } catch (error) {
@@ -46,9 +50,49 @@ export default function HistoryPage() {
     };
 
     const handleExport = (id: string) => {
+        const countToExport = counts.find(c => c.id === id);
+        console.log('Exporting count:', countToExport);
+
+        if (!countToExport) {
+            setToastMessage('Error: No se encontraron datos para exportar.');
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 3000);
+            return;
+        }
+
         setToastMessage(`Generando planilla de conteo #${id}.xlsx...`);
         setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
+
+        try {
+            // Prepare data for Excel - Safely handle missing items
+            const items = Array.isArray(countToExport.items) ? countToExport.items : [];
+
+            if (items.length === 0) {
+                console.warn('No items found for this count.');
+            }
+
+            const exportData = items.map((item: any) => ({
+                'Item': item.name || 'Desconocido',
+                'SKU': item.sku || 'N/A',
+                'Esperado': item.expected || 0,
+                'Contado': item.counted || 0,
+                'Diferencia': (item.counted || 0) - (item.expected || 0)
+            }));
+
+            // Create worksheet
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `Conteo ${id}`);
+
+            // Download file
+            XLSX.writeFile(wb, `conteo_${id}.xlsx`);
+
+            setTimeout(() => setShowToast(false), 3000);
+        } catch (error) {
+            console.error('Export error:', error);
+            setToastMessage('Error al generar el archivo Excel.');
+            setTimeout(() => setShowToast(false), 3000);
+        }
     };
 
     const getStatusBadge = (expected: number, counted: number) => {
@@ -64,12 +108,6 @@ export default function HistoryPage() {
             (count.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (count.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (count.location || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-        // Status filter might need adjustment if we are changing what 'status' means visually, 
-        // but for now let's keep the filter logic on the original 'status' field if the user still wants to filter by 'Pendiente/Cerrado'
-        // OR we can remove the filter if it doesn't make sense anymore. 
-        // The user didn't ask to remove the filter, but the column now shows Discrepancy/Correct.
-        // Let's keep the filter working on the backend status for now, as that's likely what 'Pendiente/Cerrado' refers to in the dropdown.
 
         const matchesStatus = filterStatus === 'Todos los Estados' ||
             (filterStatus === 'Pendiente revisión' && count.status === 'Pendiente') ||

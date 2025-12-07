@@ -25,6 +25,8 @@ export default function MermasPage() {
         unitCost: 0
     });
 
+    const [productLots, setProductLots] = useState<any[]>([]);
+
     // Search State
     const [searchTerm, setSearchTerm] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -82,15 +84,38 @@ export default function MermasPage() {
         setShowSuggestions(true);
     };
 
-    const selectProduct = (product: any) => {
+    const selectProduct = async (product: any) => {
         setSearchTerm(`${product.sku} - ${product.name}`);
         setNewMerma({
             ...newMerma,
             productId: product.id,
             productName: product.name,
-            unitCost: product.cost
+            unitCost: 0, // Reset cost, will be set by lot selection
+            batch: ''
         });
         setShowSuggestions(false);
+        setProductLots([]); // Clear previous lots
+
+        // Fetch lots for this product
+        try {
+            const response = await apiClient.getInventoryByProduct(product.id);
+            if (response.success) {
+                setProductLots(response.data as any[]);
+            }
+        } catch (error) {
+            console.error('Error fetching lots:', error);
+        }
+    };
+
+    const handleLotChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedBatch = e.target.value;
+        const lot = productLots.find(l => l.batch === selectedBatch);
+
+        setNewMerma({
+            ...newMerma,
+            batch: selectedBatch,
+            unitCost: lot ? (lot.unitCost || 0) : 0
+        });
     };
 
     const filteredProducts = productsDb.filter(p =>
@@ -397,13 +422,28 @@ export default function MermasPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Lote</label>
-                                    <input
-                                        type="text"
-                                        value={newMerma.batch}
-                                        onChange={(e) => setNewMerma({ ...newMerma, batch: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                        placeholder="L-2023-X"
-                                    />
+                                    {productLots.length > 0 ? (
+                                        <select
+                                            value={newMerma.batch}
+                                            onChange={handleLotChange}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                        >
+                                            <option value="">Seleccionar Lote</option>
+                                            {productLots.map(lot => (
+                                                <option key={lot.id} value={lot.batch}>
+                                                    {lot.batch} (Disp: {lot.quantity})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={newMerma.batch}
+                                            onChange={(e) => setNewMerma({ ...newMerma, batch: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                                            placeholder="L-2023-X"
+                                        />
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>

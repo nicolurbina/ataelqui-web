@@ -42,6 +42,7 @@ export async function PUT(
 
         await updateDoc(docRef, {
             ...data,
+            stock: Number(data.totalStock) || 0, // Update this field for mobile app compatibility
             updatedAt: new Date().toISOString()
         });
 
@@ -68,7 +69,32 @@ export async function PUT(
                 const updates: any = {};
                 if (data.batchNumber) updates.batch = data.batchNumber;
                 if (data.expirationDate) updates.expiryDate = data.expirationDate;
-                if (data.totalStock !== undefined) updates.quantity = Number(data.totalStock); // This might be risky if multiple lots exist, but user is editing "Total Stock"
+                // Calculate total current inventory
+                const currentTotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+                if (data.totalStock !== undefined) {
+                    const desiredTotal = Number(data.totalStock);
+                    const difference = desiredTotal - currentTotal;
+
+                    if (difference !== 0) {
+                        // Apply difference to the latest item
+                        const newQuantity = (Number(latest.quantity) || 0) + difference;
+                        updates.quantity = newQuantity < 0 ? 0 : newQuantity; // Prevent negative stock on single item if possible, though logic might need refinement for complex cases
+
+                        // If we can't subtract enough from the latest item, we might need to adjust others or create a negative entry.
+                        // For simplicity in this "Edit Product" context, we'll assume we just want to force the total.
+                        // A better approach for "Reset to 0" might be to delete all and create one 0 entry, or set all to 0.
+                        // But let's try to just adjust the latest one to make the sum correct.
+
+                        // Actually, if the user sets Total to X, they expect the SUM to be X.
+                        // If we have [50, 0] and user sets to 0. Current Sum = 50. Desired = 0. Diff = -50.
+                        // Latest is 0. New Quantity = -50. This is bad.
+
+                        // Alternative: If setting total stock, maybe we should just update the latest to be (Desired - (Sum of others)).
+                        const sumOfOthers = currentTotal - (Number(latest.quantity) || 0);
+                        updates.quantity = desiredTotal - sumOfOthers;
+                    }
+                }
 
                 if (Object.keys(updates).length > 0) {
                     await updateDoc(inventoryDocRef, updates);

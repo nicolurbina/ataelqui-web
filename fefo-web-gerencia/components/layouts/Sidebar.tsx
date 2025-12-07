@@ -6,6 +6,8 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { db } from '@/config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiClient } from '@/utils/api';
 
 const Sidebar = () => {
     const pathname = usePathname();
@@ -14,6 +16,23 @@ const Sidebar = () => {
         devoluciones: false,
     });
     const [notificationCount, setNotificationCount] = useState(0);
+
+    const [userData, setUserData] = useState<any>(null);
+    const { user } = useAuth();
+
+    useEffect(() => {
+        if (user) {
+            // Fetch user details
+            user.getIdToken().then(token => {
+                apiClient.setToken(token);
+                apiClient.getUser(user.uid).then(response => {
+                    if (response.success) {
+                        setUserData(response.data);
+                    }
+                });
+            });
+        }
+    }, [user]);
 
     useEffect(() => {
         // Real-time listener for unread notifications
@@ -148,6 +167,14 @@ const Sidebar = () => {
                 </nav>
 
                 <div className="p-4 border-t border-orange-400/30">
+                    {/* User Info */}
+                    {userData && (
+                        <div className="px-4 py-3 mb-2 bg-white/10 rounded-lg">
+                            <p className="text-sm font-bold text-white truncate">{userData.name || 'Usuario'}</p>
+                            <p className="text-xs text-white/70 truncate">{userData.role || 'Sin Rol'}</p>
+                        </div>
+                    )}
+
                     <Link href="/auth/login" className="flex items-center px-4 py-2 text-sm font-medium text-white/90 rounded-lg hover:bg-white/10 hover:text-white transition-all">
                         <span className="w-5 h-5 mr-3">
                             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>

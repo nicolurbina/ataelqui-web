@@ -9,8 +9,13 @@ export default function SettlementTrayPage() {
     const [filterStatus, setFilterStatus] = useState('Todos los Estados');
 
     // Real Data State
+    // Real Data State
     const [returns, setReturns] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Evidence Modal State
+    const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null);
+    const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
 
     useEffect(() => {
         fetchReturns();
@@ -27,14 +32,15 @@ export default function SettlementTrayPage() {
                     date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
                     vehicle: item.vehicle || 'N/A',
                     route: item.route || 'General', // Display actual route
-                    user: item.requestedBy || 'Desconocido',
+                    user: item.client || item.requestedBy || 'Desconocido',
                     driver: item.driver || 'N/A',
-                    status: item.status,
+                    status: normalizeStatus(item.status),
                     items: 1, // Treating each request as 1 item for now
                     // Details for expansion
                     productName: item.productName || 'Producto Desconocido',
                     quantity: item.quantity,
-                    reason: item.reason
+                    reason: item.reason,
+                    evidence: item.evidence
                 }));
                 setReturns(mappedReturns);
             }
@@ -43,6 +49,15 @@ export default function SettlementTrayPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const normalizeStatus = (status: string) => {
+        if (!status) return 'pending';
+        const s = status.toLowerCase();
+        if (s === 'pendiente') return 'pending';
+        if (s === 'aprobado') return 'approved';
+        if (s === 'rechazado') return 'rejected';
+        return s; // Return as is if it's already english or unknown
     };
 
     const handleApprove = async (id: string, e: React.MouseEvent) => {
@@ -75,6 +90,20 @@ export default function SettlementTrayPage() {
         } catch (error) {
             console.error('Error rejecting:', error);
         }
+    };
+
+    const handleViewEvidence = (evidence: string) => {
+        if (!evidence) {
+            alert('No hay evidencia adjunta.');
+            return;
+        }
+        setSelectedEvidence(evidence);
+        setIsEvidenceModalOpen(true);
+    };
+
+    const closeEvidenceModal = () => {
+        setIsEvidenceModalOpen(false);
+        setSelectedEvidence(null);
     };
 
     const toggleRow = (id: string) => {
@@ -189,7 +218,13 @@ export default function SettlementTrayPage() {
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="group relative inline-block">
-                                                <svg className="w-5 h-5 text-gray-400 hover:text-primary cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg
+                                                    onClick={(e) => { e.stopPropagation(); handleViewEvidence(item.evidence); }}
+                                                    className={`w-5 h-5 ${item.evidence ? 'text-blue-500 hover:text-blue-700 cursor-pointer' : 'text-gray-300 cursor-not-allowed'}`}
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                                 </svg>
@@ -250,6 +285,27 @@ export default function SettlementTrayPage() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Evidence Modal */}
+            {isEvidenceModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4" onClick={closeEvidenceModal}>
+                    <div className="relative bg-white rounded-lg max-w-3xl max-h-[90vh] overflow-auto p-2" onClick={e => e.stopPropagation()}>
+                        <button
+                            onClick={closeEvidenceModal}
+                            className="absolute top-2 right-2 bg-gray-800 text-white rounded-full p-1 hover:bg-gray-700 z-10"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <img
+                            src={selectedEvidence?.startsWith('http') ? selectedEvidence : `data:image/jpeg;base64,${selectedEvidence}`}
+                            alt="Evidencia"
+                            className="max-w-full h-auto rounded"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

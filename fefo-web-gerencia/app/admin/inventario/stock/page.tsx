@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 import { apiClient } from '../../../../utils/api';
+import { createNotification } from '../../../../utils/notifications';
 
 interface ProductData {
     id: string;
@@ -16,6 +17,8 @@ interface ProductData {
     totalStock: number;
     minStock: number;
     status: string;
+    price?: number;
+    cost?: number;
 }
 
 export default function StockPage() {
@@ -35,7 +38,9 @@ export default function StockPage() {
         boxCount: '',
         unitsPerBox: '',
         batchNumber: '',
-        expirationDate: ''
+        expirationDate: '',
+        price: '',
+        cost: ''
     });
 
     const [products, setProducts] = useState<ProductData[]>([]);
@@ -119,6 +124,240 @@ export default function StockPage() {
     const [viewingProduct, setViewingProduct] = useState<ProductData | null>(null);
     const [productBatches, setProductBatches] = useState<any[]>([]);
 
+    // Batch Management State
+    const [isLotModalOpen, setIsLotModalOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState<ProductData | null>(null);
+    const [newLot, setNewLot] = useState({
+        batch: '',
+        quantity: '' as string | number,
+        expiryDate: ''
+    });
+    const [editingLotId, setEditingLotId] = useState<string | null>(null);
+    const [fefoDays, setFefoDays] = useState(7); // Default, should fetch from config
+    const [warningDays, setWarningDays] = useState(30); // Default, should fetch from config
+    const [exceptions, setExceptions] = useState<any[]>([]); // Default, should fetch from config
+
+    // Cost Management State
+    const [isCostModalOpen, setIsCostModalOpen] = useState(false);
+    const [selectedCostProduct, setSelectedCostProduct] = useState<ProductData | null>(null);
+    const [costForm, setCostForm] = useState({
+        price: '',
+        cost: ''
+    });
+
+    // Fetch config for FEFO alerts
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const response = await apiClient.getConfig();
+                if (response.success && response.data) {
+                    const data = response.data as any;
+                    setFefoDays(data.criticalDays || 7);
+                    setWarningDays(data.warningDays || 30);
+                    setExceptions(data.exceptions || []);
+                }
+            } catch (error) {
+                console.error('Error fetching config:', error);
+            }
+        };
+        fetchConfig();
+    }, []);
+
+    const fetchProductLots = async (productId: string) => {
+        try {
+            const response = await apiClient.getInventoryByProduct(productId);
+            if (response.success) {
+                setProductBatches(response.data as any[]);
+            } else {
+                console.error('Error fetching lots:', response.error);
+                alert('Error al cargar lotes: ' + response.error);
+            }
+        } catch (error) {
+            console.error('Error fetching lots:', error);
+            alert('Error al cargar lotes. Verifique su conexión o permisos.');
+        }
+    };
+
+    const openLotModal = (product: ProductData) => {
+        setSelectedProduct(product);
+        fetchProductLots(product.id);
+        setIsLotModalOpen(true);
+    };
+
+    const syncProductStock = async (productId: string) => {
+        try {
+            // 1. Get all lots for this product
+            const response = await apiClient.getInventoryByProduct(productId);
+            if (response.success && response.data) {
+                const lots = response.data as any[];
+                // 2. Calculate total
+                const newTotalStock = lots.reduce((sum, lot) => sum + (Number(lot.quantity) || 0), 0);
+
+                // 3. Update product in DB
+                await apiClient.updateProduct(productId, { totalStock: newTotalStock });
+                console.log(`Synced stock for ${productId}: ${newTotalStock}`);
+            }
+        } catch (error) {
+            console.error('Error syncing product stock:', error);
+        }
+    };
+
+    const handleAddLot = async () => {
+        if (!selectedProduct || !newLot.batch || !newLot.quantity || !newLot.expiryDate) {
+            alert('Por favor complete todos los campos obligatorios');
+            return;
+        }
+
+        try {
+            const lotData = {
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                batch: newLot.batch,
+                quantity: Number(newLot.quantity),
+                expiryDate: newLot.expiryDate,
+                status: 'Disponible'
+            };
+
+            let response;
+            if (editingLotId) {
+                response = await apiClient.updateInventoryItem(editingLotId, lotData);
+            } else {
+                response = await apiClient.addInventoryItem(lotData);
+            }
+
+            if (response.success) {
+                // Notify
+                if (!editingLotId) {
+                    // 1. Stock Notification
+                    await createNotification(
+                        'Stock',
+                        'Nuevo Lote Agregado',
+                        `Se agregó el lote ${newLot.batch} al producto ${selectedProduct.name}`,
+                        `Cantidad: ${newLot.quantity}`
+                    );
+
+                    // 2. FEFO Alert Logic
+                    const today = new Date();
+                    const expiry = new Date(newLot.expiryDate);
+                    const diffTime = expiry.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    // Check for specific product exception or use global settings
+                    const exception = exceptions.find(ex => ex.productId === selectedProduct.id);
+                    const criticalThreshold = exception ? parseInt(exception.days) : fefoDays;
+                    const warningThreshold = warningDays;
+
+                    if (diffDays <= criticalThreshold) {
+                        await createNotification(
+                            'FEFO',
+                            'Alerta Crítica de Vencimiento',
+                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
+                            `Vence el: ${newLot.expiryDate}. Umbral crítico: ${criticalThreshold} días.`
+                        );
+                    } else if (diffDays <= warningThreshold) {
+                        await createNotification(
+                            'FEFO',
+                            'Alerta Preventiva de Vencimiento',
+                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
+                            `Vence el: ${newLot.expiryDate}. Umbral preventivo: ${warningThreshold} días.`
+                        );
+                    }
+                }
+
+                fetchProductLots(selectedProduct.id);
+                await syncProductStock(selectedProduct.id); // Sync totalStock to products collection
+                fetchData(); // Update main table stock
+                setNewLot({ batch: '', quantity: '', expiryDate: '' });
+                setEditingLotId(null);
+            } else {
+                alert('Error al guardar lote');
+            }
+        } catch (error) {
+            console.error('Error saving lot:', error);
+            alert('Error al guardar lote');
+        }
+    };
+
+    const handleEditLot = (lot: any) => {
+        setNewLot({
+            batch: lot.batch,
+            quantity: lot.quantity,
+            expiryDate: lot.expiryDate
+        });
+        setEditingLotId(lot.id);
+    };
+
+    const handleDeleteLot = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar este lote?')) return;
+
+        try {
+            const response = await apiClient.deleteInventoryItem(id);
+            if (response.success) {
+                if (selectedProduct) {
+                    fetchProductLots(selectedProduct.id);
+                    await syncProductStock(selectedProduct.id); // Sync totalStock
+                }
+                fetchData(); // Update main table stock
+            } else {
+                alert('Error al eliminar lote');
+            }
+        } catch (error) {
+            console.error('Error deleting lot:', error);
+            alert('Error al eliminar lote');
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setNewLot({ batch: '', quantity: '', expiryDate: '' });
+        setEditingLotId(null);
+    };
+
+    // Cost Management Handlers
+    const handleOpenCostModal = (product: ProductData) => {
+        setSelectedCostProduct(product);
+        setCostForm({
+            price: product.price?.toString() || '',
+            cost: product.cost?.toString() || ''
+        });
+        setIsCostModalOpen(true);
+    };
+
+    const handleSaveCosts = async () => {
+        if (!selectedCostProduct) return;
+
+        try {
+            const response = await apiClient.updateProduct(selectedCostProduct.id, {
+                price: Number(costForm.price) || 0,
+                cost: Number(costForm.cost) || 0
+            });
+
+            if (response.success) {
+                await createNotification(
+                    'System',
+                    'Costos Actualizados',
+                    `Se actualizaron los costos para ${selectedCostProduct.name}`,
+                    `Precio: $${costForm.price} | Costo: $${costForm.cost}`
+                );
+                fetchData(); // Refresh list
+                setIsCostModalOpen(false);
+                setSelectedCostProduct(null);
+            } else {
+                alert('Error al actualizar costos');
+            }
+        } catch (error) {
+            console.error('Error updating costs:', error);
+            alert('Error al actualizar costos');
+        }
+    };
+
+    const formatDate = (date: any) => {
+        if (!date) return '-';
+        if (typeof date === 'object' && 'seconds' in date) {
+            return new Date(date.seconds * 1000).toLocaleDateString('es-CL');
+        }
+        return new Date(date).toLocaleDateString('es-CL');
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'Saludable':
@@ -179,13 +418,16 @@ export default function StockPage() {
                 boxCount: '',
                 unitsPerBox: '',
                 batchNumber,
-                expirationDate
+                expirationDate,
+                price: product.price?.toString() || '',
+                cost: product.cost?.toString() || ''
             });
         } else {
             setEditingId(null);
             setNewProduct({
                 sku: '',
                 name: '',
+                brand: '',
                 category: 'Insumos',
                 provider: '',
                 warehouse: 'Bodega 1',
@@ -195,7 +437,9 @@ export default function StockPage() {
                 boxCount: '',
                 unitsPerBox: '',
                 batchNumber: '',
-                expirationDate: ''
+                expirationDate: '',
+                price: '',
+                cost: ''
             });
         }
         setIsModalOpen(true);
@@ -272,7 +516,9 @@ export default function StockPage() {
             boxCount: '',
             unitsPerBox: '',
             batchNumber: '',
-            expirationDate: ''
+            expirationDate: '',
+            price: '',
+            cost: ''
         });
     };
 
@@ -489,13 +735,21 @@ export default function StockPage() {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button
-                                                onClick={() => handleViewDetails(product)}
+                                                onClick={() => openLotModal(product)}
                                                 className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                                                title="Ver Lotes"
+                                                title="Gestionar Lotes"
                                             >
                                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleOpenCostModal(product)}
+                                                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                                title="Gestionar Costos"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             </button>
                                             <button
@@ -593,7 +847,7 @@ export default function StockPage() {
                                 <input
                                     type="text"
                                     name="brand"
-                                    value={newProduct.brand}
+                                    value={newProduct.brand || ''}
                                     onChange={handleInputChange}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
                                     placeholder="Ej: Selecta, Colun, etc."
@@ -768,95 +1022,192 @@ export default function StockPage() {
                     </div>
                 </div>
             )}
-            {/* View Details Modal */}
-            {isViewModalOpen && viewingProduct && (
+            {/* Cost Management Modal */}
+            {isCostModalOpen && selectedCostProduct && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">{viewingProduct.name}</h3>
-                                <p className="text-sm text-gray-500">SKU: {viewingProduct.sku} | Categoría: {viewingProduct.category}</p>
-                            </div>
-                            <button onClick={() => setIsViewModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                            <h3 className="text-lg font-bold text-gray-900">Gestionar Costos</h3>
+                            <button onClick={() => setIsCostModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
+                        <div className="p-6 space-y-4">
+                            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                                <h4 className="font-bold text-blue-900">{selectedCostProduct.name}</h4>
+                                <p className="text-sm text-blue-700">SKU: {selectedCostProduct.sku}</p>
+                            </div>
 
-                        <div className="p-6">
-                            <div className="grid grid-cols-3 gap-4 mb-6">
-                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
-                                    <span className="block text-xs font-bold text-blue-600 uppercase mb-1">Stock Total</span>
-                                    <span className="text-2xl font-bold text-blue-900">{viewingProduct.totalStock}</span>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-center">
-                                    <span className="block text-xs font-bold text-gray-500 uppercase mb-1">Stock Mínimo</span>
-                                    <span className="text-2xl font-bold text-gray-700">{viewingProduct.minStock}</span>
-                                </div>
-                                <div className={`p-4 rounded-xl border text-center ${viewingProduct.status === 'Crítico' ? 'bg-red-50 border-red-100' :
-                                    viewingProduct.status === 'Alerta' ? 'bg-yellow-50 border-yellow-100' :
-                                        'bg-green-50 border-green-100'
-                                    }`}>
-                                    <span className={`block text-xs font-bold uppercase mb-1 ${viewingProduct.status === 'Crítico' ? 'text-red-600' :
-                                        viewingProduct.status === 'Alerta' ? 'text-yellow-600' :
-                                            'text-green-600'
-                                        }`}>Estado</span>
-                                    <span className={`text-xl font-bold ${viewingProduct.status === 'Crítico' ? 'text-red-900' :
-                                        viewingProduct.status === 'Alerta' ? 'text-yellow-900' :
-                                            'text-green-900'
-                                        }`}>{viewingProduct.status}</span>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                    <input
+                                        type="number"
+                                        value={costForm.price}
+                                        onChange={(e) => setCostForm({ ...costForm, price: e.target.value })}
+                                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="0"
+                                    />
                                 </div>
                             </div>
 
-                            <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">Desglose por Lotes / Ubicación</h4>
-                            <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-gray-50 text-gray-500 font-semibold">
-                                        <tr>
-                                            <th className="px-4 py-2">Lote / ID</th>
-                                            <th className="px-4 py-2">Ubicación</th>
-                                            <th className="px-4 py-2">Vencimiento</th>
-                                            <th className="px-4 py-2 text-right">Cantidad</th>
-                                            <th className="px-4 py-2 text-center">Estado</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {productBatches.length > 0 ? (
-                                            productBatches.map((batch) => (
-                                                <tr key={batch.id}>
-                                                    <td className="px-4 py-2 font-medium text-gray-900">{batch.batchNumber || batch.id.substring(0, 8)}</td>
-                                                    <td className="px-4 py-2 text-gray-600">{batch.location || 'General'}</td>
-                                                    <td className="px-4 py-2 text-gray-600">
-                                                        {batch.expirationDate ? new Date(batch.expirationDate).toLocaleDateString() : 'N/A'}
-                                                    </td>
-                                                    <td className="px-4 py-2 text-right font-bold">{batch.quantity}</td>
-                                                    <td className="px-4 py-2 text-center">
-                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${batch.status === 'damaged' ? 'bg-red-100 text-red-700' :
-                                                            batch.status === 'expired' ? 'bg-orange-100 text-orange-700' :
-                                                                'bg-green-100 text-green-700'
-                                                            }`}>
-                                                            {batch.status === 'damaged' ? 'Dañado' : batch.status === 'expired' ? 'Vencido' : 'OK'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">No hay lotes registrados para este producto.</td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Costo Unitario</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                    <input
+                                        type="number"
+                                        value={costForm.cost}
+                                        onChange={(e) => setCostForm({ ...costForm, cost: e.target.value })}
+                                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsCostModalOpen(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleSaveCosts}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-orange-700 shadow-sm"
+                                >
+                                    Guardar Cambios
+                                </button>
                             </div>
                         </div>
-                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-end">
-                            <button
-                                onClick={() => setIsViewModalOpen(false)}
-                                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                            >
-                                Cerrar
+                    </div>
+                </div>
+            )}
+
+            {/* Lot Management Modal */}
+            {isLotModalOpen && selectedProduct && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Gestión de Lotes</h3>
+                                <p className="text-sm text-gray-500">{selectedProduct.name} ({selectedProduct.sku})</p>
+                            </div>
+                            <button onClick={() => setIsLotModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            {/* Add New Lot */}
+                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">{editingLotId ? 'Editar Lote' : 'Agregar Nuevo Lote'}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">N° Lote</label>
+                                        <input
+                                            type="text"
+                                            value={newLot.batch}
+                                            onChange={(e) => setNewLot({ ...newLot, batch: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                            placeholder="L-123"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Vencimiento</label>
+                                        <input
+                                            type="date"
+                                            value={newLot.expiryDate}
+                                            onChange={(e) => setNewLot({ ...newLot, expiryDate: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Cantidad</label>
+                                        <input
+                                            type="number"
+                                            value={newLot.quantity}
+                                            onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="md:col-span-1 flex gap-2">
+                                        {editingLotId && (
+                                            <button
+                                                onClick={handleCancelEdit}
+                                                className="flex-1 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={handleAddLot}
+                                            className={`flex-1 py-2 text-white font-bold rounded-lg transition-colors text-sm ${editingLotId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                        >
+                                            {editingLotId ? 'Actualizar' : '+ Agregar'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Lots List */}
+                            <div>
+                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">Lotes Existentes</h4>
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-100 text-xs text-gray-500 uppercase font-bold">
+                                            <tr>
+                                                <th className="px-4 py-3">Lote</th>
+                                                <th className="px-4 py-3">Vencimiento</th>
+                                                <th className="px-4 py-3 text-right">Cantidad</th>
+                                                <th className="px-4 py-3 text-center">Estado</th>
+                                                <th className="px-4 py-3 text-right">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {productBatches.length > 0 ? (
+                                                productBatches.map((lot) => (
+                                                    <tr key={lot.id}>
+                                                        <td className="px-4 py-3 font-medium text-gray-900">{lot.batch}</td>
+                                                        <td className="px-4 py-3 text-gray-600">{formatDate(lot.expiryDate)}</td>
+                                                        <td className="px-4 py-3 text-right font-bold">{lot.quantity}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">
+                                                                {lot.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handleEditLot(lot)}
+                                                                    className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteLot(lot.id)}
+                                                                    className="text-red-600 hover:text-red-800 font-medium text-xs"
+                                                                >
+                                                                    Eliminar
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">No hay lotes registrados para este producto.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

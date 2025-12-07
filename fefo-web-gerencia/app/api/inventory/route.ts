@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/config/firebase';
-import { collection, getDocs, query, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export async function GET() {
     try {
@@ -35,6 +35,19 @@ export async function POST(request: Request) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         });
+
+        // Update parent product stock
+        if (data.productId && data.quantity) {
+            const productRef = doc(db, 'products', data.productId);
+            const productSnap = await getDoc(productRef);
+            if (productSnap.exists()) {
+                const currentStock = Number(productSnap.data().stock) || 0;
+                await updateDoc(productRef, {
+                    stock: currentStock + Number(data.quantity),
+                    updatedAt: new Date().toISOString()
+                });
+            }
+        }
 
         return NextResponse.json({
             success: true,

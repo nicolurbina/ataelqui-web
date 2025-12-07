@@ -39,30 +39,7 @@ export default function SettingsPage() {
     const [isEditProviderModalOpen, setIsEditProviderModalOpen] = useState(false);
     const [editingProvider, setEditingProvider] = useState<any>(null);
 
-    // Product & Lots State
-    const [selectedProduct, setSelectedProduct] = useState<any>(null);
-    const [productLots, setProductLots] = useState<any[]>([]);
-    const [isLotModalOpen, setIsLotModalOpen] = useState(false);
-    const [newLot, setNewLot] = useState({
-        batch: '',
-        quantity: '' as string | number,
-        expiryDate: ''
-    });
 
-    const [editingLotId, setEditingLotId] = useState<string | null>(null);
-
-    // Products State (New)
-    const [newProduct, setNewProduct] = useState({
-        name: '',
-        sku: '',
-        brand: '',
-        category: '',
-        unit: 'UN',
-        price: '',
-        cost: '',
-        description: ''
-    });
-    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
     // Fetch Data based on tab
     useEffect(() => {
@@ -81,7 +58,7 @@ export default function SettingsPage() {
                     fetchUsers();
                 } else if (activeTab === 'providers') {
                     fetchProviders();
-                } else if (activeTab === 'params' || activeTab === 'products') {
+                } else if (activeTab === 'params') {
                     fetchConfig();
                     fetchProducts();
                 }
@@ -144,20 +121,7 @@ export default function SettingsPage() {
         }
     };
 
-    const fetchProductLots = async (productId: string) => {
-        try {
-            const response = await apiClient.getInventoryByProduct(productId);
-            if (response.success) {
-                setProductLots(response.data as any[]);
-            } else {
-                console.error('Error fetching lots:', response.error);
-                alert('Error al cargar lotes: ' + response.error);
-            }
-        } catch (error) {
-            console.error('Error fetching lots:', error);
-            alert('Error al cargar lotes. Verifique su conexión o permisos.');
-        }
-    };
+
 
     const handleAddException = async () => {
         if (!newException.productId || !newException.days) return;
@@ -226,118 +190,7 @@ export default function SettingsPage() {
         }
     };
 
-    // Lot Management Handlers
-    const openLotModal = (product: any) => {
-        setSelectedProduct(product);
-        fetchProductLots(product.id);
-        setIsLotModalOpen(true);
-    };
 
-    const handleAddLot = async () => {
-        if (!selectedProduct || !newLot.batch || !newLot.quantity || !newLot.expiryDate) {
-            alert('Por favor complete todos los campos obligatorios');
-            return;
-        }
-
-        try {
-            const lotData = {
-                productId: selectedProduct.id,
-                productName: selectedProduct.name,
-                batch: newLot.batch,
-                quantity: Number(newLot.quantity),
-                expiryDate: newLot.expiryDate,
-                status: 'Disponible'
-            };
-
-            let response;
-            if (editingLotId) {
-                response = await apiClient.updateInventoryItem(editingLotId, lotData);
-            } else {
-                response = await apiClient.addInventoryItem(lotData);
-            }
-
-            if (response.success) {
-                // Notify
-                if (!editingLotId) {
-                    // 1. Stock Notification
-                    await createNotification(
-                        'Stock',
-                        'Nuevo Lote Agregado',
-                        `Se agregó el lote ${newLot.batch} al producto ${selectedProduct.name}`,
-                        `Cantidad: ${newLot.quantity}`
-                    );
-
-                    // 2. FEFO Alert Logic
-                    const today = new Date();
-                    const expiry = new Date(newLot.expiryDate);
-                    const diffTime = expiry.getTime() - today.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    // Check for specific product exception or use global settings
-                    const exception = exceptions.find(ex => ex.productId === selectedProduct.id);
-                    const criticalThreshold = exception ? parseInt(exception.days) : fefoDays;
-                    const warningThreshold = warningDays;
-
-                    if (diffDays <= criticalThreshold) {
-                        await createNotification(
-                            'FEFO',
-                            'Alerta Crítica de Vencimiento',
-                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
-                            `Vence el: ${newLot.expiryDate}. Umbral crítico: ${criticalThreshold} días.`
-                        );
-                    } else if (diffDays <= warningThreshold) {
-                        await createNotification(
-                            'FEFO',
-                            'Alerta Preventiva de Vencimiento',
-                            `El nuevo lote ${newLot.batch} de ${selectedProduct.name} vence en ${diffDays} días.`,
-                            `Vence el: ${newLot.expiryDate}. Umbral preventivo: ${warningThreshold} días.`
-                        );
-                    }
-                }
-
-                fetchProductLots(selectedProduct.id);
-                fetchProductLots(selectedProduct.id);
-                setNewLot({ batch: '', quantity: '', expiryDate: '' });
-                setEditingLotId(null);
-                setEditingLotId(null);
-            } else {
-                alert('Error al guardar lote');
-            }
-        } catch (error) {
-            console.error('Error saving lot:', error);
-            alert('Error al guardar lote');
-        }
-    };
-
-    const handleEditLot = (lot: any) => {
-        setNewLot({
-            batch: lot.batch,
-            quantity: lot.quantity,
-            expiryDate: lot.expiryDate
-        });
-        setEditingLotId(lot.id);
-    };
-
-    const handleDeleteLot = async (id: string) => {
-        if (!confirm('¿Estás seguro de eliminar este lote?')) return;
-
-        try {
-            const response = await apiClient.deleteInventoryItem(id);
-            if (response.success) {
-                fetchProductLots(selectedProduct.id);
-            } else {
-                alert('Error al eliminar lote');
-            }
-        } catch (error) {
-            console.error('Error deleting lot:', error);
-            alert('Error al eliminar lote');
-        }
-    };
-
-    const handleCancelEdit = () => {
-        setNewLot({ batch: '', quantity: '', expiryDate: '' });
-        setEditingLotId(null);
-    };
 
     // Helper Functions
     const formatRUT = (value: string) => {
@@ -593,122 +446,7 @@ export default function SettingsPage() {
     };
 
     // Product Handlers
-    const handleCreateProduct = async () => {
-        if (!newProduct.name || !newProduct.sku) {
-            alert('Nombre y SKU son obligatorios');
-            return;
-        }
 
-        try {
-            const response = await apiClient.createProduct({
-                ...newProduct,
-                price: Number(newProduct.price) || 0,
-                cost: Number(newProduct.cost) || 0
-            });
-
-            if (response.success) {
-                fetchProducts();
-                setNewProduct({
-                    name: '',
-                    sku: '',
-                    brand: '',
-                    category: '',
-                    unit: 'UN',
-                    price: '',
-                    cost: '',
-                    description: ''
-                });
-                setIsProductModalOpen(false);
-                alert('Producto creado exitosamente');
-            } else {
-                alert('Error al crear producto: ' + response.error);
-            }
-        } catch (error) {
-            console.error('Error creating product:', error);
-            alert('Error al crear producto');
-        }
-    };
-
-    const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-            try {
-                const json = JSON.parse(evt.target?.result as string);
-                if (Array.isArray(json)) {
-                    let successCount = 0;
-                    for (const item of json) {
-                        if (item.name && item.sku) {
-                            try {
-                                await apiClient.createProduct(item);
-                                successCount++;
-                            } catch (err) {
-                                console.error('Error importing product:', item, err);
-                            }
-                        }
-                    }
-                    if (successCount > 0) {
-                        alert(`Se importaron ${successCount} productos exitosamente.`);
-                        fetchProducts();
-                    } else {
-                        alert('No se pudieron importar productos.');
-                    }
-                }
-            } catch (error) {
-                console.error('Error parsing JSON:', error);
-                alert('Error al leer el archivo JSON');
-            }
-            // Reset input
-            e.target.value = '';
-        };
-        reader.readAsText(file);
-    };
-
-    const loadSeedData = async () => {
-        if (!confirm('¿Cargar datos de ejemplo (captura de pantalla)? Esto agregará productos a la base de datos.')) return;
-
-        try {
-            const response = await fetch('/products_seed.json'); // Assuming we can serve it or just import it dynamically if placed in public
-            // Since we placed it in the root, let's try to import it directly or just hardcode the fetch if it was in public. 
-            // Actually, for simplicity in this environment, I'll just fetch it if I move it to public, OR I can just hardcode the data here for the "Quick Load" button.
-            // But wait, I put it in the root. Let's move it to public or just read it via an API route? 
-            // Client-side cannot read root files directly. 
-            // I will implement a quick "Load Screenshot Data" button that uses the data I already know.
-
-            const seedData = [
-                { "sku": "7506195144947", "name": "Jdjs", "brand": "-", "category": "Hshs", "unit": "UN" },
-                { "sku": "4r", "name": "H and", "brand": "-", "category": "Grasas", "unit": "UN" },
-                { "sku": "1", "name": "Pan", "brand": "-", "category": "Insumos", "unit": "UN" },
-                { "sku": "50146", "name": "caravella aljafor", "brand": "-", "category": "Insumos", "unit": "UN" },
-                { "sku": "731199054801", "name": "Cafe", "brand": "-", "category": "Repostería", "unit": "UN" },
-                { "sku": "7807910030782", "name": "Ñññññññññ", "brand": "-", "category": "Insumos", "unit": "UN" },
-                { "sku": "5ur", "name": "Harina", "brand": "-", "category": "Grasas", "unit": "UN" },
-                { "sku": "123", "name": "Y", "brand": "-", "category": "Insumos", "unit": "UN" },
-                { "sku": "exp://10.35.6.160:8081", "name": "Kslskslslksa", "brand": "-", "category": "Insumos", "unit": "UN" },
-                { "sku": "52415", "name": "pastelera plus", "brand": "-", "category": "Insumos", "unit": "UN" }
-            ];
-
-            let successCount = 0;
-            for (const item of seedData) {
-                // Check if exists first to avoid duplicates? API might handle it or just create new.
-                // For now, just create.
-                try {
-                    await apiClient.createProduct({ ...item, price: 0, cost: 0, description: '' });
-                    successCount++;
-                } catch (err) {
-                    console.error('Error seeding:', err);
-                }
-            }
-            alert(`Se cargaron ${successCount} productos de ejemplo.`);
-            fetchProducts();
-
-        } catch (error) {
-            console.error('Error loading seed data:', error);
-            alert('Error al cargar datos de ejemplo');
-        }
-    };
 
     return (
         <div className="p-8 min-h-screen bg-gray-50/50">
@@ -733,13 +471,7 @@ export default function SettingsPage() {
                 >
                     Proveedores
                 </button>
-                <button
-                    onClick={() => setActiveTab('products')}
-                    className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'products' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                >
-                    Productos y Lotes
-                </button>
+
                 <button
                     onClick={() => setActiveTab('params')}
                     className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'params' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'
@@ -1076,85 +808,7 @@ export default function SettingsPage() {
                         </table>
                     </div>
                 </div>
-            ) : activeTab === 'products' ? (
-                <div className="space-y-6">
-                    {/* Product Actions */}
-                    <div className="flex justify-end gap-3">
-                        <button
-                            onClick={loadSeedData}
-                            className="flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 border border-yellow-200 rounded-lg text-sm font-bold hover:bg-yellow-200 shadow-sm transition-colors"
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                            </svg>
-                            Cargar Datos Captura
-                        </button>
-                        <div className="relative">
-                            <input
-                                type="file"
-                                accept=".json"
-                                onChange={handleProductFileUpload}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                            <button className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors">
-                                <svg className="w-5 h-5 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Carga Masiva (JSON)
-                            </button>
-                        </div>
-                        <button
-                            onClick={() => setIsProductModalOpen(true)}
-                            className="flex items-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-orange-700 shadow-sm transition-colors"
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Crear Producto
-                        </button>
-                    </div>
 
-                    {/* Products Table */}
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                    <th className="px-6 py-4">Código (SKU)</th>
-                                    <th className="px-6 py-4">Nombre</th>
-                                    <th className="px-6 py-4">Marca</th>
-                                    <th className="px-6 py-4">Categoría</th>
-                                    <th className="px-6 py-4">Unidad</th>
-                                    <th className="px-6 py-4 text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {products.length > 0 ? (
-                                    products.map((product) => (
-                                        <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-6 py-4 text-sm font-mono text-blue-600">{product.sku}</td>
-                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">{product.name}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">{product.brand || '-'}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">{product.category || '-'}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">{product.unit || 'UN'}</td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button
-                                                    onClick={() => openLotModal(product)}
-                                                    className="px-3 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors"
-                                                >
-                                                    Gestionar Lotes
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No hay productos registrados.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             ) : (
                 <div className="space-y-6 max-w-2xl">
                     {/* Parameters Section */}
@@ -1435,242 +1089,8 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* Lot Management Modal */}
-            {isLotModalOpen && selectedProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">Gestión de Lotes</h3>
-                                <p className="text-sm text-gray-500">{selectedProduct.name} ({selectedProduct.sku})</p>
-                            </div>
-                            <button onClick={() => setIsLotModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-6">
-                            {/* Add New Lot */}
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">{editingLotId ? 'Editar Lote' : 'Agregar Nuevo Lote'}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                                    <div className="md:col-span-1">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">N° Lote</label>
-                                        <input
-                                            type="text"
-                                            value={newLot.batch}
-                                            onChange={(e) => setNewLot({ ...newLot, batch: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                            placeholder="L-123"
-                                        />
-                                    </div>
-                                    <div className="md:col-span-1">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Vencimiento</label>
-                                        <input
-                                            type="date"
-                                            value={newLot.expiryDate}
-                                            onChange={(e) => setNewLot({ ...newLot, expiryDate: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                        />
-                                    </div>
-                                    <div className="md:col-span-1">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Cantidad</label>
-                                        <input
-                                            type="number"
-                                            value={newLot.quantity}
-                                            onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                        />
-                                    </div>
 
-                                    <div className="md:col-span-1 flex gap-2">
-                                        {editingLotId && (
-                                            <button
-                                                onClick={handleCancelEdit}
-                                                className="flex-1 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition-colors text-sm"
-                                            >
-                                                Cancelar
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={handleAddLot}
-                                            className={`flex-1 py-2 text-white font-bold rounded-lg transition-colors text-sm ${editingLotId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
-                                        >
-                                            {editingLotId ? 'Actualizar' : '+ Agregar'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Lots List */}
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">Lotes Existentes</h4>
-                                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-gray-100 text-xs text-gray-500 uppercase font-bold">
-                                            <tr>
-                                                <th className="px-4 py-3">Lote</th>
-                                                <th className="px-4 py-3">Vencimiento</th>
-                                                <th className="px-4 py-3 text-right">Cantidad</th>
-                                                <th className="px-4 py-3 text-center">Estado</th>
-                                                <th className="px-4 py-3 text-right">Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {productLots.length > 0 ? (
-                                                productLots.map((lot) => (
-                                                    <tr key={lot.id}>
-                                                        <td className="px-4 py-3 font-medium text-gray-900">{lot.batch}</td>
-                                                        <td className="px-4 py-3 text-gray-600">{formatDate(lot.expiryDate)}</td>
-                                                        <td className="px-4 py-3 text-right font-bold">{lot.quantity}</td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-bold">
-                                                                {lot.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <div className="flex justify-end gap-2">
-                                                                <button
-                                                                    onClick={() => handleEditLot(lot)}
-                                                                    className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                                                                >
-                                                                    Editar
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDeleteLot(lot.id)}
-                                                                    className="text-red-600 hover:text-red-800 font-medium text-xs"
-                                                                >
-                                                                    Eliminar
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">No hay lotes registrados para este producto.</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {/* Create Product Modal */}
-            {isProductModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-900">Nuevo Producto</h3>
-                            <button onClick={() => setIsProductModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                                    <input
-                                        type="text"
-                                        value={newProduct.name}
-                                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                        placeholder="Ej: Harina"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">SKU / Código *</label>
-                                    <input
-                                        type="text"
-                                        value={newProduct.sku}
-                                        onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                        placeholder="Ej: 780..."
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
-                                    <input
-                                        type="text"
-                                        value={newProduct.brand}
-                                        onChange={(e) => setNewProduct({ ...newProduct, brand: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                                    <input
-                                        type="text"
-                                        value={newProduct.category}
-                                        onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Unidad</label>
-                                    <select
-                                        value={newProduct.unit}
-                                        onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    >
-                                        <option value="UN">Unidad (UN)</option>
-                                        <option value="KG">Kilogramo (KG)</option>
-                                        <option value="L">Litro (L)</option>
-                                        <option value="CJ">Caja (CJ)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio</label>
-                                    <input
-                                        type="number"
-                                        value={newProduct.price}
-                                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Costo</label>
-                                    <input
-                                        type="number"
-                                        value={newProduct.cost}
-                                        onChange={(e) => setNewProduct({ ...newProduct, cost: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                                <textarea
-                                    value={newProduct.description}
-                                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
-                                    rows={3}
-                                />
-                            </div>
-                            <div className="pt-4 flex justify-end gap-3">
-                                <button
-                                    onClick={() => setIsProductModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleCreateProduct}
-                                    className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-orange-700 shadow-sm"
-                                >
-                                    Crear Producto
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

@@ -416,6 +416,22 @@ class ApiClient {
       return { success: false, error: error.message };
     }
   }
+
+  // Kardex (Firestore Direct)
+  async getKardex() {
+    try {
+      const q = query(collection(db, 'kardex'), orderBy('date', 'desc'));
+      const snapshot = await getDocs(q);
+      const kardex = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || doc.data().date
+      }));
+      return { success: true, data: kardex };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const apiClient = new ApiClient();

@@ -15,7 +15,7 @@ export const createNotification = async (
             title,
             message,
             details: details || '',
-            timestamp: Timestamp.now(),
+            date: Timestamp.now(),
             read: false
         });
         return true;
