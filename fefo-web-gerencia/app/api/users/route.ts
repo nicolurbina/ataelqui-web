@@ -64,6 +64,15 @@ export async function POST(request: Request) {
 
         const data = await request.json();
 
+        // 1.5. Check if user exists in Firestore
+        const userSnapshot = await adminDb.collection('users').where('email', '==', data.email).get();
+        if (!userSnapshot.empty) {
+            return NextResponse.json(
+                { success: false, error: "El correo electrónico ya está registrado en el sistema." },
+                { status: 400 }
+            );
+        }
+
         // 2. Validate Input
         if (!data.email || !data.password || !data.name) {
             return NextResponse.json(

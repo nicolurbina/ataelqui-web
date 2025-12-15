@@ -47,8 +47,9 @@ export default function LoginPage() {
                         <p className="text-sm text-red-700">
                             {authError.includes('user-not-found') && 'Usuario no encontrado'}
                             {authError.includes('wrong-password') && 'Contraseña incorrecta'}
+                            {authError.includes('invalid-credential') && 'Email o contraseña incorrectos'}
                             {authError.includes('invalid-email') && 'Email inválido'}
-                            {!authError.includes('user-not-found') && !authError.includes('wrong-password') && !authError.includes('invalid-email') && authError}
+                            {!authError.includes('user-not-found') && !authError.includes('wrong-password') && !authError.includes('invalid-email') && !authError.includes('invalid-credential') && authError}
                         </p>
                     </div>
                 )}

@@ -16,6 +16,7 @@ const Sidebar = () => {
         devoluciones: false,
     });
     const [notificationCount, setNotificationCount] = useState(0);
+    const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
 
     const [userData, setUserData] = useState<any>(null);
     const { user } = useAuth();
@@ -36,15 +37,23 @@ const Sidebar = () => {
 
     useEffect(() => {
         // Real-time listener for unread notifications
-        const q = query(collection(db, 'notifications'), where('read', '==', false));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const qNotif = query(collection(db, 'notifications'), where('read', '==', false));
+        const unsubscribeNotif = onSnapshot(qNotif, (snapshot) => {
             setNotificationCount(snapshot.size);
         }, (error) => {
             console.error("Error fetching notification count:", error);
         });
 
-        return () => unsubscribe();
+        // Real-time listener for pending returns
+        const qReturns = query(collection(db, 'returns'), where('status', '==', 'pending'));
+        const unsubscribeReturns = onSnapshot(qReturns, (snapshot) => {
+            setPendingReturnsCount(snapshot.size);
+        });
+
+        return () => {
+            unsubscribeNotif();
+            unsubscribeReturns();
+        };
     }, []);
 
     const toggleMenu = (menu: string) => {
@@ -85,7 +94,7 @@ const Sidebar = () => {
                             <div className="pl-12 space-y-1 mt-1">
                                 <Link href="/admin/inventario/stock" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/inventario/stock') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Stock Actual</Link>
                                 <Link href="/admin/inventario/historial" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/inventario/historial') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Historial Conteos</Link>
-                                <Link href="/admin/inventario/kardex" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/inventario/kardex') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Kardex</Link>
+                                <Link href="/admin/inventario/movimientos" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/inventario/movimientos') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Movimientos (Kardex)</Link>
                             </div>
                         )}
                     </div>
@@ -122,7 +131,14 @@ const Sidebar = () => {
                         </button>
                         {openMenus.devoluciones && (
                             <div className="pl-12 space-y-1 mt-1">
-                                <Link href="/admin/devoluciones/bandeja" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/devoluciones/bandeja') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Por Aprobar</Link>
+                                <Link href="/admin/devoluciones/bandeja" className={`flex justify-between items-center px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/devoluciones/bandeja') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>
+                                    <span>Por Aprobar</span>
+                                    {pendingReturnsCount > 0 && (
+                                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                                            {pendingReturnsCount}
+                                        </span>
+                                    )}
+                                </Link>
                                 <Link href="/admin/devoluciones/nueva" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/devoluciones/nueva') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Nueva Devolución</Link>
                                 <Link href="/admin/devoluciones/historial" className={`block px-4 py-2 text-sm rounded-lg transition-all ${isActive('/admin/devoluciones/historial') ? 'text-white bg-white/20 font-medium shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/5'}`}>Historial</Link>
                             </div>

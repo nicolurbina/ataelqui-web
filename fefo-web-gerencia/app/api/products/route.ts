@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/config/firebase';
-import { collection, getDocs, addDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, orderBy, where } from 'firebase/firestore';
 
 export async function GET() {
     try {
@@ -33,6 +33,26 @@ export async function POST(request: Request) {
         const data = await request.json();
 
         // Basic validation could go here
+
+        // Check for existing SKU
+        const skuQuery = query(collection(db, 'products'), where('sku', '==', data.sku));
+        const skuSnapshot = await getDocs(skuQuery);
+        if (!skuSnapshot.empty) {
+            return NextResponse.json(
+                { success: false, error: 'El SKU ya existe en el sistema.' },
+                { status: 400 }
+            );
+        }
+
+        // Check for existing Name
+        const nameQuery = query(collection(db, 'products'), where('name', '==', data.name));
+        const nameSnapshot = await getDocs(nameQuery);
+        if (!nameSnapshot.empty) {
+            return NextResponse.json(
+                { success: false, error: 'El nombre del producto ya existe.' },
+                { status: 400 }
+            );
+        }
 
         // Changed from 'products' to 'productos' to match mobile app
         const docRef = await addDoc(collection(db, 'products'), {

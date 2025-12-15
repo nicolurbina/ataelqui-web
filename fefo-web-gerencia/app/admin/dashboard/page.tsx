@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import KpiCard from '@/components/kpi/KpiCard';
 import Link from 'next/link';
 import { apiClient } from '@/utils/api';
+import { db } from '@/config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export default function DashboardPage() {
     // 1. ESTADOS PARA LOS DATOS (Inicializados con 0 o vacíos)
@@ -21,6 +23,12 @@ export default function DashboardPage() {
 
     // 2. CARGAR DATOS REALES DE FIREBASE
     useEffect(() => {
+        // Real-time listener for Pending Returns
+        const qReturns = query(collection(db, 'returns'), where('status', '==', 'pending'));
+        const unsubscribeReturns = onSnapshot(qReturns, (snapshot) => {
+            setPendingTasks(prev => ({ ...prev, returns: snapshot.size }));
+        });
+
         async function fetchData() {
             try {
                 // Pedimos los productos, inventario (para alertas FEFO), tareas y kardex a la API
@@ -72,9 +80,8 @@ export default function DashboardPage() {
                     // F. FEFO ALERTS
                     const fefoAlertsCount = fefoRes.success && fefoRes.data ? (fefoRes.data as any).alertsCount : 0;
 
-                    // G. TASKS
+                    // G. TASKS (Only calculating Counting tasks here, returns are handled by real-time listener)
                     const tasks = tasksRes.success && tasksRes.data ? (tasksRes.data as any[]) : [];
-                    const returnsPending = tasks.filter(t => t.type === 'devolution').length;
                     const countingPending = tasks.filter(t => t.type === 'counting').length;
 
                     // H. ROTATION (Real Calculation)
@@ -105,7 +112,7 @@ export default function DashboardPage() {
                     });
                     setTopProducts(sortedProducts);
                     setCategoriesData(catArray);
-                    setPendingTasks({ returns: returnsPending, counting: countingPending });
+                    setPendingTasks(prev => ({ ...prev, counting: countingPending }));
                 }
             } catch (error) {
                 console.error("Error al cargar dashboard:", error);
@@ -114,6 +121,8 @@ export default function DashboardPage() {
             }
         }
         fetchData();
+
+        return () => unsubscribeReturns();
     }, []);
 
     if (loading) {

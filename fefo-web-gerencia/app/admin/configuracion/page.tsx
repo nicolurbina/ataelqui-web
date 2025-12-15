@@ -344,7 +344,7 @@ export default function SettingsPage() {
                 fetchProviders();
                 setNewProvider({ name: '', rut: '', email: '', phone: '', status: 'Activo' });
             } else {
-                alert('Error al crear proveedor');
+                alert(response.error || 'Error al crear proveedor');
             }
         } catch (error) {
             console.error('Error creating provider:', error);

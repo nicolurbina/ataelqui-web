@@ -10,6 +10,7 @@ export default function ReturnsHistoryPage() {
     const [filterOrigin, setFilterOrigin] = useState('Todos los Orígenes');
     const [filterReason, setFilterReason] = useState('Todos los Motivos');
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     // Real Data State
     const [history, setHistory] = useState<any[]>([]);
@@ -24,13 +25,23 @@ export default function ReturnsHistoryPage() {
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            const q = query(collection(db, 'returns'), orderBy('date', 'desc'));
-            const querySnapshot = await getDocs(q);
+            const [historyRes, productsRes] = await Promise.all([
+                getDocs(query(collection(db, 'returns'), orderBy('date', 'desc'))),
+                getDocs(query(collection(db, 'products'))) // Fetch products for name resolution
+            ]);
 
-            const mappedHistory = querySnapshot.docs.map(doc => {
+            const productsMap = new Map();
+            if (!productsRes.empty) {
+                productsRes.docs.forEach(doc => {
+                    const data = doc.data();
+                    productsMap.set(doc.id, data.name);
+                });
+            }
+
+            const mappedHistory = historyRes.docs.map(doc => {
                 const data = doc.data();
 
-                // Handle date parsing (Timestamp or string)
+                // Handle date parsing
                 let dateObj: Date | null = null;
                 if (data.date?.toDate) {
                     dateObj = data.date.toDate();
@@ -42,14 +53,39 @@ export default function ReturnsHistoryPage() {
                     dateObj = new Date(data.createdAt);
                 }
 
+                // Handle items array/object
+                let itemsList: any[] = [];
+                if (Array.isArray(data.items)) {
+                    itemsList = data.items;
+                } else if (data.items && typeof data.items === 'object') {
+                    itemsList = Object.values(data.items);
+                }
+
+                // Fallback for legacy data
+                if (itemsList.length === 0 && (data.productName || data.productId)) {
+                    const resolvedName = data.productName || productsMap.get(data.productId) || 'Producto Desconocido';
+                    itemsList.push({
+                        productName: resolvedName,
+                        quantity: data.quantity || 0,
+                        reason: data.reason || 'N/A',
+                        sku: data.sku || 'N/A'
+                    });
+                }
+
+                const displayProduct = itemsList.length > 0
+                    ? (itemsList.length > 1 ? `${itemsList[0].productName} (+${itemsList.length - 1})` : itemsList[0].productName)
+                    : 'Sin Productos';
+
                 return {
                     id: doc.id,
                     date: dateObj ? dateObj.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
                     rawDate: dateObj,
                     origin: data.docType === 'Factura' ? 'Móvil (Ruta)' : 'Web (Manual)',
                     client: data.client || 'Cliente Desconocido',
-                    items: data.items ? data.items.length : 0,
-                    status: 'Aprobado', // Defaulting to Approved as per screenshot/requirement or logic
+                    itemsCount: itemsList.length,
+                    productList: itemsList,
+                    productName: displayProduct,
+                    status: data.status || 'Aprobado',
                     reason: data.reason || 'Sin motivo',
                     evidenceUrl: data.evidence // Base64 string
                 };
@@ -60,6 +96,10 @@ export default function ReturnsHistoryPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const toggleRow = (id: string) => {
+        setExpandedRow(expandedRow === id ? null : id);
     };
 
     const getStatusBadge = (status: string) => {
@@ -171,39 +211,88 @@ export default function ReturnsHistoryPage() {
                             </tr>
                         ) : filteredHistory.length > 0 ? (
                             filteredHistory.map((item) => (
-                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 text-sm font-bold text-gray-900">{item.id}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{item.date}</td>
-                                    <td className="px-6 py-4 text-sm">{getOriginBadge(item.origin)}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-700 font-medium">{item.client}</td>
-                                    <td className="px-6 py-4 text-center text-sm text-gray-600">{item.items}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        {getStatusBadge(item.status)}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        {item.evidenceUrl ? (
-                                            <button
-                                                onClick={() => setSelectedImage(item.evidenceUrl)}
-                                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                                title="Ver Evidencia"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                            </button>
-                                        ) : (
-                                            <span className="text-gray-300">
-                                                <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                            </span>
-                                        )}
-                                    </td>
-                                </tr>
+                                <React.Fragment key={item.id}>
+                                    <tr
+                                        onClick={() => toggleRow(item.id)}
+                                        className={`hover:bg-gray-50 transition-colors cursor-pointer ${expandedRow === item.id ? 'bg-blue-50/50' : ''}`}
+                                    >
+                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{item.id.substring(0, 6)}...</td>
+                                        <td className="px-6 py-4 text-sm text-gray-500">{item.date}</td>
+                                        <td className="px-6 py-4 text-sm">{getOriginBadge(item.origin)}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-700 font-medium">
+                                            <div className="flex flex-col">
+                                                <span>{item.client}</span>
+                                                <span className="text-xs text-gray-400">{item.productName}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center text-sm text-gray-600 font-bold">{item.itemsCount}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            {getStatusBadge(item.status)}
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            {item.evidenceUrl ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedImage(item.evidenceUrl); }}
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                    title="Ver Evidencia"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                </button>
+                                            ) : (
+                                                <span className="text-gray-300">
+                                                    <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                    {/* Expanded Detail Row */}
+                                    {expandedRow === item.id && (
+                                        <tr className="bg-gray-50/50">
+                                            <td colSpan={7} className="px-6 py-4 cursor-default">
+                                                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-inner">
+                                                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Detalle de Productos</h4>
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="text-gray-500 border-b border-gray-100">
+                                                                <th className="pb-2 text-left">Producto</th>
+                                                                <th className="pb-2 text-center">Cantidad</th>
+                                                                <th className="pb-2 text-left">Motivo</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {item.productList && item.productList.length > 0 ? (
+                                                                item.productList.map((prod: any, idx: number) => (
+                                                                    <tr key={idx} className="border-b border-gray-50">
+                                                                        <td className="py-2">
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-medium text-gray-900">{prod.productName || 'Desconocido'}</span>
+                                                                                <span className="text-xs text-gray-400">SKU: {prod.sku}</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-2 text-center font-bold">{prod.quantity}</td>
+                                                                        <td className="py-2 text-red-600">{prod.reason}</td>
+                                                                    </tr>
+                                                                ))
+                                                            ) : (
+                                                                <tr>
+                                                                    <td colSpan={3} className="py-2 text-center text-gray-400">Sin detalles de productos (ver debug si es necesario)</td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">
+                                <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">
                                     No se encontraron resultados para los filtros seleccionados.
                                 </td>
                             </tr>
@@ -225,7 +314,7 @@ export default function ReturnsHistoryPage() {
                             </svg>
                         </button>
                         <img
-                            src={selectedImage}
+                            src={selectedImage.startsWith('http') ? selectedImage : `data:image/jpeg;base64,${selectedImage}`}
                             alt="Evidencia"
                             className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                             onClick={(e) => e.stopPropagation()}

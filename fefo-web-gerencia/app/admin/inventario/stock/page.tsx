@@ -492,7 +492,7 @@ export default function StockPage() {
                 if (response.success) {
                     fetchData(); // Refresh list
                 } else {
-                    alert('Error al crear producto');
+                    alert(response.error || 'Error al crear producto');
                 }
             }
         } catch (error) {

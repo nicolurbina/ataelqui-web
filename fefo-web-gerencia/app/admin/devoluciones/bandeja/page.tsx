@@ -6,7 +6,7 @@ import { apiClient } from '@/utils/api';
 export default function SettlementTrayPage() {
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('Todos los Estados');
+    const [filterStatus, setFilterStatus] = useState('Pendiente');
 
     // Real Data State
     // Real Data State
@@ -24,24 +24,59 @@ export default function SettlementTrayPage() {
     const fetchReturns = async () => {
         try {
             setLoading(true);
-            // Fetch all returns or filter by pending if API supports it
-            const response = await apiClient.getReturns();
-            if (response.success && response.data) {
-                const mappedReturns = (response.data as any[]).map(item => ({
-                    id: item.id,
-                    date: item.createdAt ? new Date(item.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
-                    vehicle: item.vehicle || 'N/A',
-                    route: item.route || 'General', // Display actual route
-                    user: item.client || item.requestedBy || 'Desconocido',
-                    driver: item.driver || 'N/A',
-                    status: normalizeStatus(item.status),
-                    items: 1, // Treating each request as 1 item for now
-                    // Details for expansion
-                    productName: item.productName || 'Producto Desconocido',
-                    quantity: item.quantity,
-                    reason: item.reason,
-                    evidence: item.evidence
-                }));
+            const [returnsRes, productsRes] = await Promise.all([
+                apiClient.getReturns(),
+                apiClient.getProducts()
+            ]);
+
+            const productsMap = new Map();
+            if (productsRes.success && productsRes.data) {
+                (productsRes.data as any[]).forEach(p => {
+                    productsMap.set(p.id, p.name);
+                });
+            }
+
+            if (returnsRes.success && returnsRes.data) {
+                const mappedReturns = (returnsRes.data as any[]).map(doc => {
+                    let itemsList: any[] = [];
+
+                    if (Array.isArray(doc.items)) {
+                        itemsList = doc.items;
+                    } else if (doc.items && typeof doc.items === 'object') {
+                        itemsList = Object.values(doc.items);
+                    }
+
+                    // Fallback for legacy data
+                    if (itemsList.length === 0 && (doc.productName || doc.productId)) {
+                        const resolvedName = doc.productName || productsMap.get(doc.productId) || 'Producto Desconocido';
+                        itemsList.push({
+                            productName: resolvedName,
+                            quantity: doc.quantity || 0,
+                            reason: doc.reason || 'N/A',
+                            sku: doc.sku || 'N/A'
+                        });
+                    }
+
+                    const mainProduct = itemsList.length > 0 ? itemsList[0].productName : 'Sin Productos';
+                    const displayProduct = itemsList.length > 1 ? `${mainProduct} (+${itemsList.length - 1})` : mainProduct;
+                    const totalQty = itemsList.reduce((acc: number, curr: any) => acc + (Number(curr.quantity) || 0), 0);
+
+                    return {
+                        id: doc.id,
+                        date: doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
+                        vehicle: doc.vehicle || 'N/A',
+                        route: doc.route || 'General',
+                        user: doc.client || doc.requestedBy || 'Desconocido',
+                        driver: doc.driver || 'N/A',
+                        status: normalizeStatus(doc.status),
+                        itemsCount: itemsList.length,
+                        totalQuantity: totalQty,
+                        productList: itemsList,
+                        productName: displayProduct,
+                        evidence: doc.evidence,
+                        rawDoc: process.env.NODE_ENV === 'development' ? JSON.stringify(doc) : ''
+                    };
+                });
                 setReturns(mappedReturns);
             }
         } catch (error) {
@@ -57,9 +92,10 @@ export default function SettlementTrayPage() {
         if (s === 'pendiente') return 'pending';
         if (s === 'aprobado') return 'approved';
         if (s === 'rechazado') return 'rejected';
-        return s; // Return as is if it's already english or unknown
+        return s;
     };
 
+    // ... existing handlers ...
     const handleApprove = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!confirm('¿Aprobar esta devolución?')) return;
@@ -144,11 +180,6 @@ export default function SettlementTrayPage() {
                         <span className="block text-xs text-gray-500 uppercase font-bold">Pendientes</span>
                         <span className="text-xl font-bold text-yellow-600">{pendingCount}</span>
                     </div>
-                    {/* Placeholder for Total Mes */}
-                    <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
-                        <span className="block text-xs text-gray-500 uppercase font-bold">Total Mes</span>
-                        <span className="text-xl font-bold text-gray-900">--</span>
-                    </div>
                 </div>
             </div>
 
@@ -197,11 +228,11 @@ export default function SettlementTrayPage() {
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr>
-                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Cargando devoluciones...</td>
+                                <td colSpan={9} className="px-6 py-8 text-center text-gray-500">Cargando devoluciones...</td>
                             </tr>
                         ) : filteredReturns.length === 0 ? (
                             <tr>
-                                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No se encontraron devoluciones.</td>
+                                <td colSpan={9} className="px-6 py-8 text-center text-gray-500">No se encontraron devoluciones.</td>
                             </tr>
                         ) : (
                             filteredReturns.map((item) => (
@@ -212,7 +243,7 @@ export default function SettlementTrayPage() {
                                         <td className="px-6 py-4 text-sm text-gray-600">{item.route}</td>
                                         <td className="px-6 py-4 text-sm text-gray-700 font-medium">{item.user}</td>
                                         <td className="px-6 py-4 text-sm text-gray-600">{item.driver}</td>
-                                        <td className="px-6 py-4 text-center text-sm font-bold text-gray-700">{item.items}</td>
+                                        <td className="px-6 py-4 text-center text-sm font-bold text-gray-700">{item.itemsCount}</td>
                                         <td className="px-6 py-4 text-center">
                                             {getStatusBadge(item.status)}
                                         </td>
@@ -228,10 +259,6 @@ export default function SettlementTrayPage() {
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                                 </svg>
-                                                {/* Tooltip Simulation */}
-                                                <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-32 bg-gray-900 text-white text-xs rounded py-1 px-2 text-center z-10">
-                                                    Ver Foto Evidencia
-                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right space-x-2">
@@ -256,7 +283,7 @@ export default function SettlementTrayPage() {
                                     {/* Expanded Details Row */}
                                     {expandedRow === item.id && (
                                         <tr className="bg-gray-50/50">
-                                            <td colSpan={8} className="px-6 py-4">
+                                            <td colSpan={9} className="px-6 py-4">
                                                 <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-inner">
                                                     <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Detalle de Productos Devueltos</h4>
                                                     <table className="w-full text-sm">
@@ -268,11 +295,31 @@ export default function SettlementTrayPage() {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            <tr className="border-b border-gray-50">
-                                                                <td className="py-2">{item.productName}</td>
-                                                                <td className="py-2 text-center font-bold">{item.quantity}</td>
-                                                                <td className="py-2 text-red-600">{item.reason}</td>
-                                                            </tr>
+                                                            {item.productList && item.productList.length > 0 ? (
+                                                                item.productList.map((prod: any, idx: number) => (
+                                                                    <tr key={idx} className="border-b border-gray-50">
+                                                                        <td className="py-2">
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-medium text-gray-900">{prod.productName || 'Desconocido'}</span>
+                                                                                <span className="text-xs text-gray-400">SKU: {prod.sku}</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-2 text-center font-bold">{prod.quantity}</td>
+                                                                        <td className="py-2 text-red-600">{prod.reason}</td>
+                                                                    </tr>
+                                                                ))
+                                                            ) : (
+                                                                <tr>
+                                                                    <td colSpan={3} className="py-2 text-center text-gray-400">
+                                                                        <p>Sin detalles de productos.</p>
+                                                                        {process.env.NODE_ENV === 'development' && (
+                                                                            <pre className="text-left text-xs bg-gray-100 p-2 mt-2 rounded overflow-auto max-w-lg mx-auto">
+                                                                                DEBUG: {item.rawDoc}
+                                                                            </pre>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            )}
                                                         </tbody>
                                                     </table>
                                                 </div>
