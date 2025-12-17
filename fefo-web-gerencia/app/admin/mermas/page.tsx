@@ -124,7 +124,11 @@ export default function MermasPage() {
     );
 
     const handleAddMerma = async () => {
-        if (!newMerma.productId || !newMerma.batch || newMerma.quantity <= 0) return;
+        // Enforce required fields
+        if (!newMerma.productId || !newMerma.batch || newMerma.quantity <= 0 || !newMerma.unitCost) {
+            alert('Por favor complete todos los campos obligatorios (Producto, Lote, Cantidad, Costo).');
+            return;
+        }
 
         try {
             // Create a new waste item in 'waste' collection
@@ -186,6 +190,18 @@ export default function MermasPage() {
     });
 
     const totalLoss = filteredWriteOffs.reduce((acc, item) => acc + item.totalLoss, 0);
+
+    // Calculate Breakdown
+    const totalExpired = filteredWriteOffs
+        .filter(item => item.cause === 'Vencido')
+        .reduce((acc, item) => acc + item.totalLoss, 0);
+
+    const totalDamaged = filteredWriteOffs
+        .filter(item => item.cause === 'Daño')
+        .reduce((acc, item) => acc + item.totalLoss, 0);
+
+    const expiredPercentage = totalLoss > 0 ? (totalExpired / totalLoss) * 100 : 0;
+    const damagedPercentage = totalLoss > 0 ? (totalDamaged / totalLoss) * 100 : 0;
 
     const handleDownloadPDF = () => {
         const doc = new jsPDF();
@@ -274,21 +290,20 @@ export default function MermasPage() {
                         <div>
                             <div className="flex justify-between text-sm mb-1">
                                 <span className="font-medium text-gray-700">Vencimiento</span>
-                                {/* Placeholder calculation for breakdown */}
-                                <span className="font-bold text-gray-900">--</span>
+                                <span className="font-bold text-gray-900">{formatCurrency(totalExpired)}</span>
                             </div>
                             <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
-                                <div className="bg-red-500 h-4 rounded-full" style={{ width: '0%' }}></div>
+                                <div className="bg-red-600 h-4 rounded-full transition-all duration-500 ease-out" style={{ width: `${expiredPercentage}%` }}></div>
                             </div>
                         </div>
                         {/* Daño Bar */}
                         <div>
                             <div className="flex justify-between text-sm mb-1">
                                 <span className="font-medium text-gray-700">Daño / Rotura</span>
-                                <span className="font-bold text-gray-900">--</span>
+                                <span className="font-bold text-gray-900">{formatCurrency(totalDamaged)}</span>
                             </div>
                             <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
-                                <div className="bg-orange-400 h-4 rounded-full" style={{ width: '0%' }}></div>
+                                <div className="bg-orange-500 h-4 rounded-full transition-all duration-500 ease-out" style={{ width: `${damagedPercentage}%` }}></div>
                             </div>
                         </div>
                     </div>

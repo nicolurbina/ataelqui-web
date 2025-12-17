@@ -96,7 +96,7 @@ export default function StockPage() {
                         brand: (product as any).brand,
                         category: product.category,
                         provider: product.provider,
-                        warehouse: 'Múltiple', // Placeholder
+                        warehouse: product.warehouse || 'Bodega 1',
                         totalStock,
                         minStock,
                         status
@@ -704,35 +704,35 @@ export default function StockPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                <th className="px-6 py-4">SKU</th>
-                                <th className="px-6 py-4">Producto</th>
-                                <th className="px-6 py-4">Marca</th>
-                                <th className="px-6 py-4">Categoría</th>
-                                <th className="px-6 py-4">Proveedor</th>
-                                <th className="px-6 py-4">Bodega</th>
-                                <th className="px-6 py-4 text-center">Stock Total</th>
-                                <th className="px-6 py-4 text-center">Mínimo</th>
-                                <th className="px-6 py-4 text-center">Estado</th>
-                                <th className="px-6 py-4 text-right">Acciones</th>
+                                <th className="px-3 py-3">SKU</th>
+                                <th className="px-3 py-3">Producto</th>
+                                <th className="px-3 py-3">Marca</th>
+                                <th className="px-3 py-3">Categoría</th>
+                                <th className="px-3 py-3">Proveedor</th>
+                                <th className="px-3 py-3">Bodega</th>
+                                <th className="px-3 py-3 text-center">Stock Total</th>
+                                <th className="px-3 py-3 text-center">Mínimo</th>
+                                <th className="px-3 py-3 text-center">Estado</th>
+                                <th className="px-3 py-3 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredProducts.map((product) => (
                                 <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${product.totalStock < product.minStock ? 'bg-red-50/30' : ''}`}>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{product.sku}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-700 font-medium">{product.name}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{product.brand || '-'}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{product.category}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{product.provider}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{product.warehouse}</td>
-                                    <td className={`px-6 py-4 text-sm font-bold text-center ${product.totalStock < product.minStock ? 'text-red-600' : 'text-gray-900'}`}>
+                                    <td className="px-3 py-3 text-sm font-medium text-gray-900">{product.sku}</td>
+                                    <td className="px-3 py-3 text-sm text-gray-700 font-medium">{product.name}</td>
+                                    <td className="px-3 py-3 text-sm text-gray-500">{product.brand || '-'}</td>
+                                    <td className="px-3 py-3 text-sm text-gray-500">{product.category}</td>
+                                    <td className="px-3 py-3 text-sm text-gray-500">{product.provider}</td>
+                                    <td className="px-3 py-3 text-sm text-gray-500">{product.warehouse}</td>
+                                    <td className={`px-3 py-3 text-sm font-bold text-center ${product.totalStock < product.minStock ? 'text-red-600' : 'text-gray-900'}`}>
                                         {product.totalStock}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 text-center">{product.minStock}</td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-3 py-3 text-sm text-gray-500 text-center">{product.minStock}</td>
+                                    <td className="px-3 py-3 text-center">
                                         {getStatusBadge(product.status)}
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-3 py-3 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button
                                                 onClick={() => openLotModal(product)}
@@ -847,6 +847,7 @@ export default function StockPage() {
                                 <input
                                     type="text"
                                     name="brand"
+                                    required
                                     value={newProduct.brand || ''}
                                     onChange={handleInputChange}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -985,10 +986,11 @@ export default function StockPage() {
                                     <input
                                         type="text"
                                         name="batchNumber"
+                                        required
                                         value={newProduct.batchNumber}
                                         onChange={handleInputChange}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                        placeholder="Opcional"
+                                        placeholder="L-123"
                                     />
                                 </div>
                                 <div>
@@ -996,9 +998,11 @@ export default function StockPage() {
                                     <input
                                         type="date"
                                         name="expirationDate"
+                                        required
                                         value={newProduct.expirationDate}
                                         onChange={handleInputChange}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                        min={new Date().toISOString().split('T')[0]}
                                     />
                                 </div>
                             </div>

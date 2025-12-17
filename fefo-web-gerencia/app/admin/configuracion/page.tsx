@@ -243,8 +243,8 @@ export default function SettingsPage() {
 
     // User Handlers
     const handleCreateUser = async () => {
-        if (!newUser.name || !newUser.email) {
-            alert('Nombre y Email son obligatorios');
+        if (!newUser.name || !newUser.email || !newUser.password) {
+            alert('Nombre, Email y Contraseña son obligatorios');
             return;
         }
 
@@ -333,8 +333,8 @@ export default function SettingsPage() {
 
     // Provider Handlers
     const handleCreateProvider = async () => {
-        if (!newProvider.name || !newProvider.rut) {
-            alert('Nombre y RUT son obligatorios');
+        if (!newProvider.name || !newProvider.rut || !newProvider.email || !newProvider.phone) {
+            alert('Todos los campos son obligatorios (Nombre, RUT, Email, Teléfono)');
             return;
         }
 
@@ -494,6 +494,7 @@ export default function SettingsPage() {
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre Completo</label>
                                     <input
                                         type="text"
+                                        required
                                         value={newUser.name}
                                         onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -504,6 +505,7 @@ export default function SettingsPage() {
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Corporativo</label>
                                     <input
                                         type="email"
+                                        required
                                         value={newUser.email}
                                         onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -526,6 +528,7 @@ export default function SettingsPage() {
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contraseña</label>
                                     <input
                                         type="password"
+                                        required
                                         value={newUser.password}
                                         onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -684,6 +687,7 @@ export default function SettingsPage() {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre / Razón Social</label>
                                 <input
                                     type="text"
+                                    required
                                     value={newProvider.name}
                                     onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
@@ -694,6 +698,7 @@ export default function SettingsPage() {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">RUT</label>
                                 <input
                                     type="text"
+                                    required
                                     value={newProvider.rut}
                                     onChange={(e) => setNewProvider({ ...newProvider, rut: formatRUT(e.target.value) })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
@@ -705,6 +710,7 @@ export default function SettingsPage() {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Contacto</label>
                                 <input
                                     type="email"
+                                    required
                                     value={newProvider.email}
                                     onChange={(e) => setNewProvider({ ...newProvider, email: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"
@@ -715,6 +721,7 @@ export default function SettingsPage() {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label>
                                 <input
                                     type="text"
+                                    required
                                     value={newProvider.phone}
                                     onChange={(e) => setNewProvider({ ...newProvider, phone: formatPhone(e.target.value) })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary"

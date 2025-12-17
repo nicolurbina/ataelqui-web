@@ -13,6 +13,13 @@ export default function AssignTaskPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate Validation
+        if (!title || !assignee || !dueDate) {
+            alert('Por favor complete todos los campos obligatorios.');
+            return;
+        }
+
         // Mock submission logic
         console.log({ title, description, assignee, priority, dueDate });
         setShowSuccess(true);
@@ -60,7 +67,7 @@ export default function AssignTaskPage() {
 
                         {/* Descripción */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (Opcional)</label>
                             <textarea
                                 rows={4}
                                 value={description}

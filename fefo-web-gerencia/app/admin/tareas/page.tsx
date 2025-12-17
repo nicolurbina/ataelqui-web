@@ -65,7 +65,7 @@ export default function TasksPage() {
                         <form className="space-y-5">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarea</label>
-                                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <select required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                                     <option>Picking Pedido</option>
                                     <option>Conteo Cíclico</option>
                                     <option>Revisión FEFO</option>
@@ -74,13 +74,13 @@ export default function TasksPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Referencia / Ubicación</label>
-                                <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ej: Pedido #405 o Pasillo B" />
+                                <input type="text" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ej: Pedido #405 o Pasillo B" />
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Asignar a</label>
-                                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                                    <option>Seleccionar Bodeguero...</option>
+                                <select required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Seleccionar Bodeguero...</option>
                                     <option>Juan Pérez</option>
                                     <option>Pedro Soto</option>
                                     <option>Maria Gomez</option>

@@ -64,7 +64,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create product
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, sku, category, price, cost, description, brand, unit } = req.body;
+    const { name, sku, category, price, cost, description, brand, unit, provider, warehouse, totalStock, minStock, status } = req.body;
 
     // Validate required fields (allow 0 for price/cost)
     if (!name || !sku || !category || price === undefined || cost === undefined) {
@@ -75,15 +75,30 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const db = getFirebaseDB();
+
+    // Check for duplicate SKU
+    const duplicateCheck = await db.collection('products').where('sku', '==', sku).get();
+    if (!duplicateCheck.empty) {
+      return res.status(400).json({
+        success: false,
+        error: `Product with SKU '${sku}' already exists.`
+      });
+    }
+
     const newProduct: Product = {
       name,
       sku,
       category,
       price,
       cost,
-      description,
+      description: description || '',
       brand: brand || '',
       unit: unit || 'UN',
+      provider: provider || '',
+      warehouse: warehouse || '',
+      totalStock: Number(totalStock) || 0,
+      minStock: Number(minStock) || 0,
+      status: status || 'Saludable',
       createdAt: new Date(),
       updatedAt: new Date()
     };

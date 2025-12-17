@@ -26,7 +26,7 @@ export default function ReturnsHistoryPage() {
         try {
             setLoading(true);
             const [historyRes, productsRes] = await Promise.all([
-                getDocs(query(collection(db, 'returns'), orderBy('date', 'desc'))),
+                getDocs(query(collection(db, 'returns'))), // Removed orderBy to include docs missing 'date'
                 getDocs(query(collection(db, 'products'))) // Fetch products for name resolution
             ]);
 
@@ -41,9 +41,11 @@ export default function ReturnsHistoryPage() {
             const mappedHistory = historyRes.docs.map(doc => {
                 const data = doc.data();
 
-                // Handle date parsing
+                // Handle date parsing (Prioritize returnDate for web returns)
                 let dateObj: Date | null = null;
-                if (data.date?.toDate) {
+                if (data.returnDate) {
+                    dateObj = new Date(data.returnDate);
+                } else if (data.date?.toDate) {
                     dateObj = data.date.toDate();
                 } else if (data.date) {
                     dateObj = new Date(data.date);
@@ -76,20 +78,38 @@ export default function ReturnsHistoryPage() {
                     ? (itemsList.length > 1 ? `${itemsList[0].productName} (+${itemsList.length - 1})` : itemsList[0].productName)
                     : 'Sin Productos';
 
+                // Normalize Status
+                let normalizedStatus = data.status || 'Aprobado';
+                if (normalizedStatus === 'approved') normalizedStatus = 'Aprobado';
+                if (normalizedStatus === 'rejected') normalizedStatus = 'Rechazado';
+                if (normalizedStatus === 'pending') normalizedStatus = 'Pendiente';
+
+                // Normalize Origin
+                const originType = data.docType || data.documentType;
+                const isMobile = originType === 'Factura' && !data.returnDate; // Heuristic: old mobile returns have docType but no returnDate usually
+
                 return {
                     id: doc.id,
                     date: dateObj ? dateObj.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A',
                     rawDate: dateObj,
-                    origin: data.docType === 'Factura' ? 'Móvil (Ruta)' : 'Web (Manual)',
-                    client: data.client || 'Cliente Desconocido',
+                    origin: isMobile ? 'Móvil (Ruta)' : 'Web (Manual)',
+                    client: data.client || data.requestedBy || 'Cliente Desconocido',
                     itemsCount: itemsList.length,
                     productList: itemsList,
                     productName: displayProduct,
-                    status: data.status || 'Aprobado',
+                    status: normalizedStatus,
                     reason: data.reason || 'Sin motivo',
-                    evidenceUrl: data.evidence // Base64 string
+                    evidenceUrl: data.evidence || data.evidenceUrl // Base64 string or URL
                 };
             });
+
+            // Client-side Sort
+            mappedHistory.sort((a, b) => {
+                const dateA = a.rawDate ? a.rawDate.getTime() : 0;
+                const dateB = b.rawDate ? b.rawDate.getTime() : 0;
+                return dateB - dateA;
+            });
+
             setHistory(mappedHistory);
         } catch (error) {
             console.error('Error fetching history:', error);

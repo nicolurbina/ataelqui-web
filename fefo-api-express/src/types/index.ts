@@ -9,6 +9,11 @@ export interface Product {
   brand?: string;
   unit?: string;
   description: string;
+  provider?: string;
+  warehouse?: string;
+  totalStock?: number;
+  minStock?: number;
+  status?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

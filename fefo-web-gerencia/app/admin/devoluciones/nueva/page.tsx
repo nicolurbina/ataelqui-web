@@ -88,6 +88,12 @@ export default function NewReturnPage() {
             }
         }
 
+        // Validate required fields explicitly (Double check in case HTML5 required is bypassed)
+        if (!formData.client || !formData.driver || !formData.documentNumber || !formData.vehicle || !formData.route || !date) {
+            alert('Por favor complete todos los campos obligatorios.');
+            return;
+        }
+
         try {
             // Save Data to Firestore (Direct Client-Side Write)
             const returnsRef = collection(db, 'returns');
@@ -154,6 +160,7 @@ export default function NewReturnPage() {
                                     onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Nombre del Chofer o Bodeguero..."
+                                    required
                                 />
                             </div>
 
@@ -180,6 +187,7 @@ export default function NewReturnPage() {
                                     onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Ej: 123456"
+                                    required
                                 />
                             </div>
 
@@ -198,6 +206,7 @@ export default function NewReturnPage() {
                                     onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Ej: Citroen, Camión 01..."
+                                    required
                                 />
                             </div>
 
@@ -210,12 +219,13 @@ export default function NewReturnPage() {
                                     onChange={(e) => setFormData({ ...formData, route: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                                     placeholder="Ej: Ruta Norte, Viernes..."
+                                    required
                                 />
                             </div>
 
                             {/* Observaciones */}
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones / Descripción del Motivo</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones / Descripción del Motivo (Opcional)</label>
                                 <textarea
                                     value={formData.comments}
                                     onChange={(e) => setFormData({ ...formData, comments: e.target.value })}

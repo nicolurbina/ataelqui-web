@@ -39,6 +39,7 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
+      console.log(`[ApiClient] Requesting: ${url}`);
       const headers: any = {
         'Content-Type': 'application/json',
         ...options.headers,
